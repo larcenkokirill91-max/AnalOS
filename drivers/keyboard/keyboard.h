@@ -1,4 +1,3 @@
-// drivers/keyboard/keyboard.h — Паспорт драйвера клавиатуры
 #ifndef KEYBOARD_H
 #define KEYBOARD_H
 

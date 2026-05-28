@@ -1,4 +1,3 @@
-// keyboard.c
 #include "keyboard.h"
 
 unsigned char inb(unsigned short port) {
@@ -21,4 +20,3 @@ char get_ascii_char(unsigned char scancode) {
     }
     return 0;
 }
-
