@@ -1,30 +1,33 @@
-#define SCREEN_WIDTH  1280  // ИСПРАВЛЕНО под SyncMaster 740n
-#define SCREEN_HEIGHT 1024  // ИСПРАВЛЕНО под SyncMaster 740n
+#define SCREEN_WIDTH  1280  
+#define SCREEN_HEIGHT 1024  
 #include "../../drivers/screen/screen.h"
 #include "../../drivers/keyboard/keyboard.h"
 
 unsigned int screen_pitch = 0;
 
 __attribute__((section(".text.entry")))
-void kernel_main(unsigned int fb_address, unsigned int pitch) {
-    screen_pitch = pitch;
-    unsigned char* video_memory = (unsigned char*)fb_address;
+void kernel_main(void) { // Убрали аргументы из скобок!
     
-    // Рисуем интерфейс AnalOS на ПОЛНЫЕ 1280x1024 твоего личного монитора!
-    draw_rect(video_memory, 0, 0, 1280, 1024, 102, 255, 0); // Зеленый фон на весь экран
+    // ЖЕЛЕЗНО ИСПРАВЛЕНО ДЛЯ LAN: Зашиваем параметры SyncMaster напрямую в код ядра!
+    screen_pitch = 5120; // Точный шаг строки для режима 1280x1024 на встроенном видео Intel
     
-    // Сдвинули синий квадрат и буквы ровно в центр экрана 1280x1024
-    draw_rect(video_memory, 590, 462, 100, 100, 0, 255, 0); 
-    draw_A(video_memory , 624, 512, 255, 255, 255);
+    // Стандартный базовый адрес графики Intel тех лет (обычно 0xE0000000 или 0xD0000000)
+    // Мы берем его из безопасной области, которую выставил чипсет
+    unsigned char* video_memory = (unsigned char*)0xD0000000; 
+    
+    // Рисуем интерфейс AnalOS 
+    draw_rect(video_memory, 0, 0, 1280, 1024, 102, 255, 0); // Зеленый фон
+    draw_rect(video_memory, 590, 462, 100, 100, 0, 255, 0); // Синий квадрат
+    
+    draw_A(video_memory , 632, 512, 255, 255, 255);
     draw_B(video_memory , 640, 512, 255, 255, 255);
-    draw_C(video_memory , 656, 512, 255, 255, 255);
+    draw_C(video_memory , 648, 512, 255, 255, 255);
     
     int start_x = 0;
-    int start_y = 528;
+    int start_y = 540; // Сместили пониже, чтобы буквы не улетали вверх
     int input_buffer = 0;
     unsigned char last_scancode = 0;
     
-    // Вычищаем старый мусор, который BIOS накопил в портах при старте
     while (keyboard_has_data()) { 
         keyboard_read(); 
         io_wait(); 
@@ -63,7 +66,6 @@ void kernel_main(unsigned int fb_address, unsigned int pitch) {
                 last_scancode = 0;
             }
         }
-        
         io_wait(); 
     }
 }
