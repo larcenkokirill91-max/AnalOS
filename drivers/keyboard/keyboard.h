@@ -1,8 +1,11 @@
 #ifndef KEYBOARD_H
 #define KEYBOARD_H
 
+void io_wait(void);
 unsigned char inb(unsigned short port);
 void outb(unsigned short port, unsigned char val);
+int keyboard_has_data(void);
+unsigned char keyboard_read(void);
 char get_ascii_char(unsigned char scancode);
 
 #endif

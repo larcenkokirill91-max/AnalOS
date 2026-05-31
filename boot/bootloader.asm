@@ -14,7 +14,7 @@ start:
 
     ; 1. Получаем информацию о режиме VBE 0x4115 (800x600, 24-bit цвет)
     mov ax, 0x4F01
-    mov cx, 0x4118
+    mov cx, 0x411B
     mov di, 0x7000      ; Буфер для ModeInfoBlock
     int 0x10
     cmp ax, 0x004F
@@ -22,7 +22,7 @@ start:
 
     ; 2. Включаем графический режим VESA
     mov ax, 0x4F02
-    mov bx, 0x4118      
+    mov bx, 0x411B      
     int 0x10
     cmp ax, 0x004F
     jne video_error
@@ -32,29 +32,31 @@ start:
     or al, 2
     out 0x92, al
 
-    ; 4. Сброс и чтение диска (30 секторов ядра)
-    xor ax, ax
-    mov dl, [boot_drive]
-    int 0x13
-
+    ; === 4. НАДЕЖНОЕ РАСШИРЕННОЕ LBA ЧТЕНИЕ ДЛЯ ФЛЕШЕК ===
     mov ax, 0x1000
     mov es, ax
-    xor bx, bx
+    
+    ; Заполняем структуру DAP (Disk Address Packet) в стеке
+    push dword 0        ; Старшие 4 байта LBA-адреса (нули)
+    push dword 1        ; Начинаем с 1-го сектора (сразу за MBR)
+    push word 0x1000    ; Сегмент памяти (0x1000)
+    push word 0x0000    ; Смещение памяти (0x0000) -> Итого адрес 0x10000
+    push word 30        ; Читаем 30 секторов ядра
+    push word 0x0010    ; Размер структуры DAP (16 байт)
 
-    mov ah, 0x02
-    mov al, 30          
-    mov ch, 0
-    mov dh, 0
-    mov cl, 2
+    mov ah, 0x42        ; Расширенное чтение LBA
     mov dl, [boot_drive]
+    mov si, sp          ; Указатель на DAP в стеке
     int 0x13
-    jc disk_error
+    jc disk_error       ; Если сбой контроллера флешки — в красный экран
+    
+    add sp, 16          ; Чистим стек от DAP
+    ; === КОНЕЦ ЧТЕНИЯ ===
 
     ; ВЫТАСКИВАЕМ ДАННЫЕ ИЗ СТРУКТУРЫ VBE:
-    mov edx, [0x7000 + 16]  ; edx = реальный Pitch (шаг строки в байтах). Он находится на 16-м байте.
-    and edx, 0xFFFF         ; Сбрасываем верхние 16 бит, так как Pitch — это word (2 байта)
-    
-    mov ecx, [0x7000 + 40]  ; ecx = физический адрес экрана (PhysBasePtr)
+    movzx edx, word [0x7000 + 16]  ; Жестко читаем 2 байта Pitch (шаг строки)
+    mov ecx, dword [0x7000 + 40]   ; Жестко читаем 4 байта PhysBasePtr (адрес экрана)
+
 
     ; 5. Переход в 32-битный защищенный режим
     cli
@@ -90,12 +92,16 @@ init_pm:
     mov ebp, 0x90000
     mov esp, ebp
 
-    ; ПЕРЕДАЕМ АРГУМЕНТЫ В СИ (в x86 они заталкиваются справа налево)
-    push edx    ; Второй аргумент: шаг строки (pitch)
-    push ecx    ; Первый аргумент: адрес экрана (fb_address)
-    
-    call KERNEL_OFFSET
+    ; ЖЕЛЕЗНО ИСПРАВЛЕНО ДЛЯ КОРРЕКТНОГО МАСШТАБА:
+    ; Записываем адрес экрана и pitch в фиксированные глобальные переменные в памяти ядра
+    mov [0x9000], ecx    ; Физический адрес экрана запишется сразу за точкой входа
+    mov [0x9010], edx    ; Шаг строки (Pitch) запишется следом
+
+    push dword [0x9010]  ; Второй аргумент: pitch
+    push dword [0x9000]  ; Первый аргумент: fb_address
+    call KERNEL_OFFSET    ; Просто прыгаем в Си, стек теперь пуст и чист!
     jmp $
+
 
 align 4
 gdt_start:
@@ -119,3 +125,4 @@ boot_drive db 0
 
 times 510-($-$$) db 0
 dw 0xaa55
+

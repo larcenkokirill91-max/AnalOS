@@ -8,11 +8,13 @@ kernel.o: src/kernel/kernel.c
 
 screen.o: drivers/screen/screen.c
 	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c drivers/screen/screen.c -o screen.o
+
 keyboard.o: drivers/keyboard/keyboard.c
 	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c drivers/keyboard/keyboard.c -o keyboard.o
 
+# ЖЕЛЕЗНО ИСПРАВЛЕНО: Добавлен флаг --oformat binary для сборки чистого плоского бинарника
 kernel.bin: kernel.o screen.o keyboard.o linker.ld
-	ld -m elf_i386 -T linker.ld -o kernel.bin kernel.o screen.o keyboard.o
+	ld -m elf_i386 --oformat binary -T linker.ld -o kernel.bin kernel.o screen.o keyboard.o
 
 os-image.img: boot.bin kernel.bin
 	cat boot.bin kernel.bin > os-image.img
@@ -23,5 +25,5 @@ run: os-image.img
 	qemu-system-i386 -fda os-image.img -vga std -display sdl -d cpu,int,guest_errors -D qemu.log
 
 clean:
-	rm -f *.bin *.o qemu.log
+	rm -f *.bin *.o *.img qemu.log
 
