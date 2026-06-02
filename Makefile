@@ -25,7 +25,9 @@ kernel.bin: kernel.o screen.o keyboard.o disk.o linker.ld
 
 os-image.img: boot.bin kernel.bin
 	cat boot.bin kernel.bin > os-image.img
+	python3 mkfs.py
 	truncate -s 1474560 os-image.img
+
 
 # ==============================================================================
 # АВТОМАТИЧЕСКИЙ ДЕПЛОЙ В СЕТЕВУЮ ПАПКУ

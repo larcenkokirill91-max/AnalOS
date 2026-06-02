@@ -10,6 +10,6 @@ char get_ascii_char(unsigned char scancode);
 void mouse_init(void);
 int mouse_has_data(void);
 unsigned short inw(unsigned short port);
+void cpu_halt(void);
 
 #endif
-

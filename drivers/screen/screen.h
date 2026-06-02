@@ -10,5 +10,7 @@ void draw_off(unsigned char* video_memory, int start_x, int start_y, unsigned ch
 void draw_char(unsigned char* video_memory, char c, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b);
 void draw_cursor(unsigned char* video_memory, int start_x, int start_y);
 void undraw_cursor(unsigned char* video_memory, int start_x, int start_y);
+void draw_circle(unsigned char* video_memory, int center_x, int center_y, int radius, unsigned char r, unsigned char g, unsigned char b);
+void swap_buffers(void);
 
 #endif

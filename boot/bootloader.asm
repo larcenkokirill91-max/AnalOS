@@ -1,6 +1,7 @@
 [org 0x7c00]
 [bits 16]
 
+; Возвращаем ядро на базовый безопасный адрес 0x10000 (64 Кб)
 KERNEL_OFFSET equ 0x10000
 
 start:
@@ -12,10 +13,10 @@ start:
 
     mov [boot_drive], dl
 
-    ; 1. Получаем информацию о режиме VBE 0x411B (1280x1024, 24-bit цвет)
+    ; 1. Получаем информацию о режиме VBE 0x411B (1280x1024, 32 bit цвет)
     mov ax, 0x4F01
     mov cx, 0x411B
-    mov di, 0x7000      ; Буфер для ModeInfoBlock
+    mov di, 0x7000      
     int 0x10
     cmp ax, 0x004F
     jne video_error
@@ -32,26 +33,25 @@ start:
     or al, 2
     out 0x92, al
 
-    ; === 4. НАДЕЖНОЕ РАСШИРЕННОЕ LBA ЧТЕНИЕ ДЛЯ ФЛЕШЕК И СЕТИ ===
-    mov ax, 0x1000
-    mov es, ax
-    
-    ; Заполняем структуру DAP (Disk Address Packet) в стеке
-    push dword 0        ; Старшие 4 байта LBA-адреса (нули)
-    push dword 1        ; Начинаем с 1-го сектора (сразу за MBR)
-    push word 0x1000    ; Сегмент памяти (0x1000)
-    push word 0x0000    ; Смещение памяти (0x0000) -> Итого адрес 0x10000
-    push word 30        ; Читаем 30 секторов ядра
-    push word 0x0010    ; Размер структуры DAP (16 байт)
-
-    mov ah, 0x42        ; Расширенное чтение LBA
+    ; Сбрасываем сеть перед чтением
+    xor ax, ax
     mov dl, [boot_drive]
-    mov si, sp          ; Указатель на DAP в стеке
     int 0x13
-    jc disk_error       ; Если сбой контроллера — в красный экран
-    
-    add sp, 16          ; Чистим стек от DAP
-    ; === КОНЕЦ ЧТЕНИЯ ===
+
+    ; === БЕЗОПАСНОЕ МОНОЛИТНОЕ ЧТЕНИЕ ВСЕГО ОБРАЗА ===
+    push dword 0        ; Старшие 4 байта LBA (нули)
+    push dword 1        ; Стартуем со 1-го сектора (сразу за MBR)
+    push word 0x1000    ; Сегмент памяти (0x1000 * 16 = 0x10000)
+    push word 0x0000    ; Смещение памяти (0x0000)
+    push word 50        ; Скачиваем 50 секторов (и ФС, и Ядро вместе!)
+    push word 0x0010    ; Размер структуры DAP
+
+    mov ah, 0x42
+    mov dl, [boot_drive]
+    mov si, sp          
+    int 0x13
+    jc disk_error
+    add sp, 16          ; Очистили стек
 
     ; 5. Переход в 32-битный защищенный режим
     cli
@@ -66,13 +66,13 @@ start:
 video_error:
     mov ax, 0xB800
     mov es, ax
-    mov word [es:0], 0x0C56
+    mov word [es:0], 0x0C56 
     jmp $
 
 disk_error:
     mov ax, 0xB800
     mov es, ax
-    mov word [es:0], 0x0944
+    mov word [es:0], 0x0944 
     jmp $
 
 [bits 32]
@@ -87,8 +87,7 @@ init_pm:
     mov ebp, 0x90000
     mov esp, ebp
 
-    ; ЖЕЛЕЗНО ИСПРАВЛЕНО ДЛЯ КОРРЕКТНОГО МАСШТАБА:
-    ; Никаких пушей и затирания памяти. Просто прыгаем в чистое Си-ядро!
+    ; Прыгаем обратно на 0x10000
     call KERNEL_OFFSET    
     jmp $
 

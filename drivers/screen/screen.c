@@ -146,12 +146,33 @@ void undraw_cursor(unsigned char* video_memory, int start_x, int start_y) {
 		{2, 1, 2, 0, 0, 0, 0, 0},
 		{2, 2, 0, 0, 0, 0, 0, 0}
 	};
-	for (int row = 0; row < 8; row++) {
-		for (int col = 0; col < 8; col++) {
-			unsigned char pixel = cursor[row][col];
-			if (pixel == 1 || pixel == 2) {
-				draw_rect(video_memory, start_x + col, start_y + row, 1, 1, 69, 178, 253);
+	for (int y = 0; y < 8; y++) {
+		for (int x = 0; x < 8; x++) {
+			int screen_x = start_x + x;
+			int screen_y = start_y + y;
+			int dx = screen_x - 640;
+			int dy = screen_y - 512;
+			if (dx * dx + dy * dy <= 10000) {
+				draw_rect(video_memory, screen_x, screen_y, 1, 1, 255, 255, 255);
+			} else {
+				draw_rect(video_memory, screen_x, screen_y, 1, 1, 69, 178, 253);
+			}
+		}		
+	}
+}
+void draw_circle(unsigned char* video_memory, int center_x, int center_y, int radius, unsigned char r, unsigned char g, unsigned char b) {
+	for (int y = -radius; y <= radius; y++) {
+		for (int x = -radius; x <= radius; x++) {
+			if (x * x + y * y <= radius * radius) {
+				draw_rect(video_memory, center_x + x, center_y + y, 1, 1, r, g, b);
 			}
 		}
+	}
+}
+void swap_buffers() {
+	unsigned int* src = (unsigned int*)0x02000000;
+	unsigned int* dest = (unsigned int*)0xD0000000;
+	for (int i = 0; i < 1310720; i++) {
+		dest[i] = src[i];
 	}
 }
