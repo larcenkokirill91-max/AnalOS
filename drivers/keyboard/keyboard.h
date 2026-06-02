@@ -7,6 +7,8 @@ void outb(unsigned short port, unsigned char val);
 int keyboard_has_data(void);
 unsigned char keyboard_read(void);
 char get_ascii_char(unsigned char scancode);
+void mouse_init(void);
+int mouse_has_data(void);
 
 #endif
 

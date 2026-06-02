@@ -74,3 +74,42 @@ void draw_C(unsigned char* video_memory, int start_x, int start_y, unsigned char
     }
 }
 
+void draw_os(unsigned char* video_memory, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b) {
+    unsigned char font_os[8] = {
+        0b01110111,
+        0b10001000,
+        0b10001000,
+        0b11111000,
+        0b10001111,
+        0b10001000,
+        0b10001000,
+        0b01110111
+    };
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            if ((font_os[row] >> (7 - col)) & 1) {
+                draw_rect(video_memory, start_x + (col * 2), start_y + (row * 2), 2, 2, r, g, b);
+            }
+        }
+    }
+}
+void draw_off(unsigned char* video_memory, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b) {
+    unsigned char font_off[8] = {
+        0b11111111,
+        0b10000001,
+        0b10011001,
+        0b10100101,
+        0b10100101,
+        0b10111101,
+        0b10000001,
+        0b11111111
+    };
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            if ((font_off[row] >> (7 - col)) & 1) {
+                draw_rect(video_memory, start_x + (col * 2), start_y + (row * 2), 2, 2, r, g, b);
+            }
+        }
+    }
+}
+
