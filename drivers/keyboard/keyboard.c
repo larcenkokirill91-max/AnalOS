@@ -36,4 +36,24 @@ char get_ascii_char(unsigned char scancode) {
     }
     return 0;
 }
-
+void mouse_wait (unsigned char type) {
+	if (type = 0) {
+		while ((inb(0x64) & 2) != 0);
+	} else {
+		while ((inb(0x64) & 1) == 0);
+	}
+}
+int mouse_has_data(void) {
+	unsigned char status = inb(0x64);
+	return ((status & 1) && (status & 0x20));
+}
+void mouse_init (void) {
+	mouse_wait(0);
+	outb(0x64, 0xA8);
+	mouse_wait(0);
+	outb(0x64, 0xD4);
+	mouse_wait(0);
+	outb(0x60, 0xF4);
+	mouse_wait(1);
+	inb(0x60);
+}
