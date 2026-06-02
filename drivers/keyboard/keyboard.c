@@ -54,6 +54,9 @@ void mouse_init (void) {
 	outb(0x64, 0xD4);
 	mouse_wait(0);
 	outb(0x60, 0xF4);
-	mouse_wait(1);
-	inb(0x60);
+}
+unsigned short inw(unsigned short port) {
+	unsigned short result;
+	asm volatile("inw %1, %0" : "=a"(result) : "Nd"(port));
+	return result;
 }
