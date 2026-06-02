@@ -8,5 +8,7 @@ void draw_C(unsigned char* video_memory, int start_x, int start_y, unsigned char
 void draw_os(unsigned char* video_memory, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b);
 void draw_off(unsigned char* video_memory, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b);
 void draw_char(unsigned char* video_memory, char c, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b);
+void draw_cursor(unsigned char* video_memory, int start_x, int start_y);
+void undraw_cursor(unsigned char* video_memory, int start_x, int start_y);
 
 #endif

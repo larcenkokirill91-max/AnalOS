@@ -112,4 +112,46 @@ void draw_off(unsigned char* video_memory, int start_x, int start_y, unsigned ch
         }
     }
 }
-
+void draw_cursor(unsigned char* video_memory, int start_x, int start_y) {
+	unsigned char cursor[8][8] = {
+		{2, 2, 0, 0, 0, 0, 0, 0},
+		{2, 1, 2, 0, 0, 0, 0, 0},
+		{2, 1, 1, 2, 0, 0, 0, 0},
+		{2, 1, 1, 1, 2, 0, 0, 0},
+		{2, 1, 1, 1, 1, 2, 0, 0},
+		{2, 1, 1, 2, 2, 2, 2, 0},
+		{2, 1, 2, 0, 0, 0, 0, 0},
+		{2, 2, 0, 0, 0, 0, 0, 0}
+	};
+	for (int row = 0; row < 8; row++) {
+		for (int col = 0; col < 8; col++) {
+			unsigned char pixel = cursor[row][col];
+			if (pixel == 1) {
+				draw_rect(video_memory, start_x + col, start_y + row, 1, 1, 255, 255, 255);
+			} 
+			else if (pixel == 2) {
+				draw_rect(video_memory, start_x + col, start_y + row, 1, 1, 0, 0, 0);
+			}
+		}
+	}
+}
+void undraw_cursor(unsigned char* video_memory, int start_x, int start_y) {
+	unsigned char cursor[8][8] = {
+		{2, 2, 0, 0, 0, 0, 0, 0},
+		{2, 1, 2, 0, 0, 0, 0, 0},
+		{2, 1, 1, 2, 0, 0, 0, 0},
+		{2, 1, 1, 1, 2, 0, 0, 0},
+		{2, 1, 1, 1, 1, 2, 0, 0},
+		{2, 1, 1, 2, 2, 2, 2, 0}, 
+		{2, 1, 2, 0, 0, 0, 0, 0},
+		{2, 2, 0, 0, 0, 0, 0, 0}
+	};
+	for (int row = 0; row < 8; row++) {
+		for (int col = 0; col < 8; col++) {
+			unsigned char pixel = cursor[row][col];
+			if (pixel == 1 || pixel == 2) {
+				draw_rect(video_memory, start_x + col, start_y + row, 1, 1, 69, 178, 253);
+			}
+		}
+	}
+}

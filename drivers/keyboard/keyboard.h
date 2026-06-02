@@ -9,6 +9,7 @@ unsigned char keyboard_read(void);
 char get_ascii_char(unsigned char scancode);
 void mouse_init(void);
 int mouse_has_data(void);
+unsigned short inw(unsigned short port);
 
 #endif
 
