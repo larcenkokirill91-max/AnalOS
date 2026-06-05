@@ -1,67 +1,62 @@
+#include "idt.h"
 #include "../../drivers/keyboard/keyboard.h"
+#include "../../drivers/screen/screen.h"
 
-// ЯВНО ПРЕДУПРЕЖДАЕМ КОМПИЛЯТОР: эти функции лежат в другом месте и скоро будут линковаться
-void pic_remap(void);
-void pic_enable_keyboard(void);
+struct idt_entry idt[256];
 
-// Структура одного дескриптора прерывания в архитектуре x86
-struct idt_entry_struct {
-    unsigned short base_low;  
-    unsigned short sel;       
-    unsigned char  always0;   
-    unsigned char  flags;     
-    unsigned short base_high; 
-} __attribute__((packed));
+unsigned char current_scancode = 0;
 
-// Структура указателя IDTR для инструкции lids
-struct idt_ptr_struct {
-    unsigned short limit;     
-    unsigned int   base;      
-} __attribute__((packed));
-
-// Массив дескрипторов и указатель IDTR
-struct idt_entry_struct idt[256];
-struct idt_ptr_struct   idt_ptr;
-
-extern void idt_load(unsigned int idt_ptr_address);
-extern void keyboard_handler_asm(void);
-extern void exception_handler_asm(void); // Обработчик ошибок процессора
-extern void dummy_handler_asm(void);    // Заглушка для аппаратных IRQ
-
-// Функция заполнения конкретного вектора в таблице IDT
-void idt_set_gate(unsigned char num, unsigned int base, unsigned short sel, unsigned char flags) {
-    idt[num].base_low  = base & 0xFFFF;
-    idt[num].base_high = (base >> 16) & 0xFFFF;
-    idt[num].sel       = sel;
-    idt[num].always0   = 0;
-    idt[num].flags     = flags;
+__attribute__((interrupt))
+void keyboard_handler(struct interrupt_frame* frame) {
+    
+    current_scancode = inb(0x60);
+    io_wait();
+    outb(0x20, 0x20);
 }
 
-// Главная функция инициализации IDT
-void init_idt(void) {
-    idt_ptr.limit = (sizeof(struct idt_entry_struct) * 256) - 1;
-    idt_ptr.base  = (unsigned int)&idt;
 
-    // Первые 32 вектора отдаем под обработку внутренних исключений ЦП
-    for (int i = 0; i < 32; i++) {
-        idt_set_gate(i, (unsigned int)exception_handler_asm, 0x08, 0x8E);
-    }
+void default_handler(struct interrupt_frame* frame) {}
 
-    // Все остальные векторы (32-255) забиваем стандартной аппаратной заглушкой
-    for (int i = 32; i < 256; i++) {
-        idt_set_gate(i, (unsigned int)dummy_handler_asm, 0x08, 0x8E);
-    }
-
-    // Теперь GCC точно знает эти функции! Ремапим PIC (IRQ1 клавиатуры станет вектором 33)
-    pic_remap();
-
-    // Ставим обработчик клавиатуры на вектор 33 (0x21)
-    idt_set_gate(33, (unsigned int)keyboard_handler_asm, 0x08, 0x8E); 
-
-    // Загружаем IDT в процессор
-    idt_load((unsigned int)&idt_ptr);
-
-    // Разрешаем только клавиатуру
-    pic_enable_keyboard();
+void idt_set_gate(int num, unsigned int handler, unsigned short selector, unsigned char flags) {
+	idt[num].offset_lower = handler & 0xFFFF;
+	idt[num].selector = selector;
+	idt[num].zero = 0;
+	idt[num].flags = flags;
+	idt[num].offset_higher = handler >> 16;
 }
 
+void pic_remap(void) {
+    // 1. Запускаем инициализацию обоих чипов PIC (команда 0x11)
+    outb(0x20, 0x11); io_wait();
+    outb(0xA0, 0x11); io_wait();
+
+    // 2. ВАЖНО: Переносим базовые векторы!
+    outb(0x21, 0x20); io_wait(); // Мастер-чип теперь начинается с карточки 32 (0x20)
+    outb(0xA1, 0x28); io_wait(); // Слейв-чип теперь начинается с карточки 40 (0x28)
+
+    // 3. Рассказываем чипам, как они соединены друг с другом
+    outb(0x21, 0x04); io_wait(); // Мастер подключен к Слейву через IRQ 2
+    outb(0xA1, 0x02); io_wait(); // Слейв знает, что он ведомый
+
+    // 4. Включаем 32-битный режим 8086 для обоих чипов (команда 0x01)
+    outb(0x21, 0x01); io_wait();
+    outb(0xA1, 0x01); io_wait();
+
+    // 5. Открываем маски: разрешаем Таймер (IRQ 0), Клавиатуру (IRQ 1) и Каскад (IRQ 2)
+    outb(0x21, 0xFD); io_wait(); // Оставляем открытыми биты 0, 1, 2
+    outb(0xA1, 0xEF); io_wait(); // Слейв пока полностью маскируем
+}
+
+
+void idt_init(void) {
+        pic_remap();
+	struct idt_ptr ptr;
+	ptr.long_idt = 2047;
+	ptr.addres = (unsigned int)&idt;
+	for (int num = 0; num < 256; num++) {
+		idt_set_gate(num, (unsigned int)default_handler, 0x08, 0x8E);
+	}
+	idt_set_gate(33, (unsigned int)keyboard_handler, 0x08, 0x8E);
+	__asm__ __volatile__("lidt (%0)" : : "r"(&ptr));
+	__asm__ __volatile__("sti");
+}

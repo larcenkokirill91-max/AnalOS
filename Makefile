@@ -20,8 +20,14 @@ keyboard.o: drivers/keyboard/keyboard.c
 disk.o: drivers/disk/disk.c
 	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c drivers/disk/disk.c -o disk.o
 
-kernel.bin: kernel.o screen.o keyboard.o disk.o linker.ld
-	ld -m elf_i386 --oformat binary -T linker.ld -o kernel.bin kernel.o screen.o keyboard.o disk.o
+window.o: src/kernel/window.c
+	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c src/kernel/window.c -o window.o
+
+idt.o: src/kernel/idt.c
+	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-sse -mno-mmx -mno-80387 -c src/kernel/idt.c -o idt.o
+
+kernel.bin: kernel.o screen.o keyboard.o disk.o window.o idt.o linker.ld
+	ld -m elf_i386 --oformat binary -T linker.ld -o kernel.bin kernel.o screen.o keyboard.o disk.o window.o idt.o
 
 os-image.img: boot.bin kernel.bin
 	cat boot.bin kernel.bin > os-image.img
