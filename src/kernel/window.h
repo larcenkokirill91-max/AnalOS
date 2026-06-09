@@ -9,9 +9,6 @@ struct window {
 	unsigned int width;
 	unsigned int height;
 	struct Point lt;
-	struct Point lb;
-	struct Point rt;
-	struct Point rb;
 	unsigned char is_visible;
 	unsigned char resizable;
 	unsigned char is_dragging;

@@ -1,0 +1,12 @@
+unsigned int mouse_bg_buffer[64];
+int alt_pressed = 0;
+int menu_open = 0;
+int mouse_x = 640;
+int mouse_y = 512;
+int mouse_cycle = 0;
+signed char mouse_packet[3];
+unsigned char data = 0;
+int h = 0, m = 0, s = 0;
+int last_s = -1;
+int last_m = -1;
+int last_h = -1;

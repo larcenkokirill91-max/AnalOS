@@ -7,6 +7,7 @@ void strcpy(char *dest, const char *src);
 void print_at(const char *str, unsigned char color, int x, int y);
 void clear_screen();
 void draw_pixel(int index, unsigned int color);
+void (*draw_digit[10])(unsigned char*, int, int, unsigned char, unsigned char, unsigned char);
 
 #endif
 
