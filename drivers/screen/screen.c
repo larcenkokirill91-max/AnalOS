@@ -1,4 +1,7 @@
 #include "screen.h"
+#include "../keyboard/keyboard.h"
+#include "../../src/math.h"
+#include "../../src/kernel/time.h"
 
 extern unsigned int screen_pitch;
 
@@ -10,66 +13,6 @@ void draw_rect(unsigned char* video_memory, int start_x, int start_y, int width,
             video_memory[offset + 1] = g;
             video_memory[offset + 2] = r;
             video_memory[offset + 3] = 0;
-        }
-    }
-}
-
-void draw_A(unsigned char* video_memory, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b) {
-    unsigned char font_A[8] = {
-        0b00011000,
-        0b00100100,
-        0b01000010,
-        0b01111110,
-        0b01000010,
-        0b01000010,
-        0b01000010,
-        0b00000000
-    };
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 8; col++) {
-            if ((font_A[row] >> (7 - col)) & 1) {
-                draw_rect(video_memory, start_x + (col * 2), start_y + (row * 2), 2, 2, r, g, b);
-            }
-        }
-    }
-}
-
-void draw_B(unsigned char* video_memory, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b) {
-    unsigned char font_B[8] = {
-        0b01111100,
-        0b01000010,
-        0b01000010,
-        0b01111100,
-        0b01000010,
-        0b01000010,
-        0b01111100,
-        0b00000000
-    };
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 8; col++) {
-            if ((font_B[row] >> (7 - col)) & 1) {
-                draw_rect(video_memory, start_x + (col * 2), start_y + (row * 2), 2, 2, r, g, b);
-            }
-        }
-    }
-}
-
-void draw_C(unsigned char* video_memory, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b) {
-    unsigned char font_C[8] = {
-        0b00011100,
-        0b00100010,
-        0b01000000,
-        0b01000000,
-        0b01000000,
-        0b00100010,
-        0b00011100,
-        0b00000000
-    };
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 8; col++) {
-            if ((font_C[row] >> (7 - col)) & 1) {
-                draw_rect(video_memory, start_x + (col * 2), start_y + (row * 2), 2, 2, r, g, b);
-            }
         }
     }
 }
@@ -93,25 +36,7 @@ void draw_os(unsigned char* video_memory, int start_x, int start_y, unsigned cha
         }
     }
 }
-void draw_off(unsigned char* video_memory, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b) {
-    unsigned char font_off[8] = {
-        0b11111111,
-        0b10000001,
-        0b10011001,
-        0b10100101,
-        0b10100101,
-        0b10111101,
-        0b10000001,
-        0b11111111
-    };
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 8; col++) {
-            if ((font_off[row] >> (7 - col)) & 1) {
-                draw_rect(video_memory, start_x + (col * 2), start_y + (row * 2), 2, 2, r, g, b);
-            }
-        }
-    }
-}
+
 void draw_cursor(unsigned char* video_memory, int start_x, int start_y) {
 	unsigned char cursor[8][8] = {
 		{2, 2, 0, 0, 0, 0, 0, 0},
@@ -175,4 +100,29 @@ void swap_buffers() {
 	for (int i = 0; i < 1310720; i++) {
 		dest[i] = src[i];
 	}
+}
+
+void draw_restart(unsigned char* video_memory, int start_x, int start_y) {
+	draw_circle(video_memory, start_x, start_y, 50, 0, 120, 212);
+	draw_circle(video_memory, start_x, start_y, 35, 255, 255, 255);
+	start_y += 25;
+	draw_rect(video_memory, start_x, start_y, 30, 30, 0, 120, 212);
+	start_x += 10;
+	draw_rect(video_memory, start_x, start_y, 20, 20, 255, 255, 255);
+	start_x -= 40;
+	start_y -= 8;
+	draw_rect(video_memory, start_x, start_y, 30, 65, 255, 255, 255);
+}
+
+void draw_off(unsigned char* video_memory, int start_x, int start_y) {
+	draw_circle(video_memory, start_x, start_y, 50, 0, 120, 212);
+        draw_circle(video_memory, start_x, start_y, 35, 255, 255, 255);
+	start_y -= 50;
+	start_x -= 5;
+	draw_rect(video_memory, start_x, start_y, 10, 40, 0, 120, 212);
+}
+
+void draw_off_menu(unsigned char* video_memory) {
+	draw_restart(video_memory, 550, 500);
+	draw_off(video_memory, 800, 500);
 }

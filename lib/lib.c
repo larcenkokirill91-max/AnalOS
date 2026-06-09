@@ -44,3 +44,7 @@ void draw_pixel(int index, unsigned int color) {
 	unsigned int *fb = (unsigned int *)0xFD000000;
 	fb[index] = color;
 }
+void (*draw_digit[10])(unsigned char*, int, int, unsigned char, unsigned char, unsigned char) = {
+        draw_zero, draw_one, draw_two, draw_three, draw_four,
+        draw_five, draw_six, draw_seven, draw_eight, draw_nine
+};

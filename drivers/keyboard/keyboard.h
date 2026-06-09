@@ -10,6 +10,9 @@ char get_ascii_char(unsigned char scancode);
 void mouse_init(void);
 int mouse_has_data(void);
 unsigned short inw(unsigned short port);
+static inline void outw(unsigned short port, unsigned short data) {
+    __asm__ __volatile__("outw %0, %1" : : "a"(data), "Nd"(port));
+}
 void cpu_halt(void);
 
 #endif

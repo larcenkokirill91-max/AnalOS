@@ -5,111 +5,149 @@
 #include "../../drivers/screen/screen.h"
 #include "../../drivers/keyboard/keyboard.h"
 #include "../../drivers/disk/disk.h"
+#include "variable.h"
+#include "../../drivers/screen/font.h"
 #include "../fs/fs.h"
 #include "window.h"
+#include "../math.h"
+#include "time.h"
+#include "../start_menu.h"
 #include "idt.h"
+
+void (*draw_digit[10])(unsigned char*, int, int, unsigned char, unsigned char, unsigned char) = {
+        draw_zero, draw_one, draw_two, draw_three, draw_four,
+        draw_five, draw_six, draw_seven, draw_eight, draw_nine
+};
+
+void draw_time(unsigned char* video_memory) {
+        get_rtc_time(&h, &m, &s);
+        if (m != last_m || h != last_h) {
+                last_m = m;
+                last_h = h;
+                int fh = floor_div(h, 10);
+                int lh = tenth_digit(h, 10);
+                int fm = floor_div(m, 10);
+                int lm = tenth_digit(m, 10);
+                draw_rect(video_memory, 1180, 1000, 20, 20, 229, 236, 253); 
+                draw_digit[fh](video_memory, 1180, 1000, 0, 0, 0);
+                draw_rect(video_memory, 1196, 1000, 20, 20, 229, 236, 253); 
+                draw_digit[lh](video_memory, 1196, 1000, 0, 0, 0);
+                draw_rect(video_memory, 1212, 1002, 4, 4, 0, 0, 0);
+                draw_rect(video_memory, 1212, 1012, 4, 4, 0, 0, 0);
+                draw_rect(video_memory, 1216, 1000, 20, 20, 229, 236, 253); 
+                draw_digit[fm](video_memory, 1216, 1000, 0, 0, 0);
+                draw_rect(video_memory, 1232, 1000, 20, 20, 229, 236, 253); 
+                draw_digit[lm](video_memory, 1232, 1000, 0, 0, 0);
+        }
+}
+
+void kernel_main(void);
 extern unsigned char current_scancode;
 unsigned int screen_pitch = 5120;
 void render(unsigned char* video_memory, struct superblock* fs) {
 	draw_rect(video_memory, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 69, 178, 253);
 	draw_rect(video_memory, 0, 990, SCREEN_WIDTH, 40, 229, 236, 253);
-
+	draw_start(video_memory, 650, 995);
 	if (fs->magic == 0x1337) {
-		draw_os(video_memory, 640, 512, 0, 255, 0);     // Зеленый (Успех)
+		draw_os(video_memory, 640, 512, 0, 0, 0);     
 	} else {
 		draw_os(video_memory, 640, 512, 255, 0, 0);
 	}
 }
+
 __attribute__((section(".text.entry")))
 void kernel_main(void) {
-    unsigned char* video_memory = (unsigned char*)0xD0000000; 
-    int alt_pressed = 0;
-    int menu_open = 0;
-    int mouse_x = 640;
-    int mouse_y = 512;
-    int mouse_cycle = 0;
-    signed char mouse_packet[3];
-    unsigned char data = 0;
-    struct window win;
-    win.lt.x = 25;  win.lt.y = 25;
-    win.rt.x = 525; win.rt.y = 25;
-    win.lb.x = 25;  win.lb.y = 225;
-    win.width = 500;
-    win.height = 200;
-    unsigned int mouse_bg_buffer[64];
-    render(video_memory, (struct superblock*)0x15800);
-    draw_window(video_memory, &win);
-    for (int x = 0; x < 8; x++) {
-    	for (int y = 0; y < 8; y++) {
-        	unsigned int* vram32 = (unsigned int*)video_memory;
-                int screen_offset = ((mouse_y + y) * (screen_pitch / 4)) + (mouse_x + x);
-                mouse_bg_buffer[y * 8 + x] = vram32[screen_offset];
+	unsigned char* video_memory = (unsigned char*)0xD0000000; 
+	render(video_memory, (struct superblock*)0x15800);
+	for (int x = 0; x < 8; x++) {
+		for (int y = 0; y < 8; y++) {
+			unsigned int* vram32 = (unsigned int*)video_memory;
+			int screen_offset = ((mouse_y + y) * (screen_pitch / 4)) + (mouse_x + x);
+			mouse_bg_buffer[y * 8 + x] = vram32[screen_offset];
+		}
 	}
-    }
-    draw_cursor(video_memory, mouse_x, mouse_y);
-    mouse_init();
-    idt_init();
-    while(1) {
-        unsigned char status = inb(0x64);
-        io_wait();
-        if (status & 0x01) {
-            data = inb(0x60);
-            io_wait();
-            if (status & 0x20) {
-                if (mouse_cycle == 0 && (data & 0x08) == 0) { continue; }
-                mouse_packet[mouse_cycle] = data;
-                mouse_cycle++;
-                if (mouse_cycle == 3) {
-                    mouse_cycle = 0;
-                    if ((mouse_packet[0] & 0x08) == 0) { continue; }
-		    for (int x = 0; x < 8; x++) {
-			for (int y = 0; y < 8; y++) {
-			    unsigned int* vram32 = (unsigned int*)video_memory;
-			    int screen_offset = ((mouse_y + y) * (screen_pitch / 4)) + (mouse_x + x);
-			    vram32[screen_offset] = mouse_bg_buffer[y * 8 + x]; 
+	struct window win[3];
+        win[0].lt.x = 450;  win[0].lt.y = 400;
+        win[0].width = 450; win[0].height = 200;
+        win[1].lt.x = 450;  win[1].lt.y = 300;
+        win[1].width = 400; win[1].height = 250;
+        win[2].lt.x = 900;  win[2].lt.y = 600;
+        win[2].width = 300; win[2].height = 150;
+	draw_cursor(video_memory, mouse_x, mouse_y);
+	mouse_init();
+	idt_init();
+	while(1) {
+		unsigned char status = inb(0x64);
+		io_wait();
+		if (status & 0x01) {
+			data = inb(0x60);
+			io_wait();
+			if (status & 0x20) {
+				if (mouse_cycle == 0 && (data & 0x08) == 0) { continue; }
+				mouse_packet[mouse_cycle] = data;
+				mouse_cycle++;
+				if (mouse_cycle == 3) {
+					mouse_cycle = 0;
+					if ((mouse_packet[0] & 0x08) == 0) continue;
+					for (int x = 0; x < 8; x++) {
+						for (int y = 0; y < 8; y++) {
+							unsigned int* vram32 = (unsigned int*)video_memory;
+							int screen_offset = ((mouse_y + y) * (screen_pitch / 4)) + (mouse_x + x);
+							vram32[screen_offset] = mouse_bg_buffer[y * 8 + x]; 
+						}
+					}
+					signed char move_x = mouse_packet[1];
+					signed char move_y = mouse_packet[2];
+					mouse_x += move_x;
+					mouse_y -= move_y;
+					if (mouse_x < 0)    mouse_x = 0;
+					if (mouse_x > 1272) mouse_x = 1272;
+					if (mouse_y < 0)    mouse_y = 0;
+					if (mouse_y > 1016) mouse_y = 1016;
+					for (int x = 0; x < 8; x++) {
+						for (int y = 0; y < 8; y++) {
+							unsigned int* vram32 = (unsigned int*)video_memory;
+							int screen_offset = ((mouse_y + y) * (screen_pitch / 4)) + (mouse_x + x);
+							mouse_bg_buffer[y * 8 + x] = vram32[screen_offset]; 
+						}
+					}
+					draw_cursor(video_memory, mouse_x, mouse_y);
+				}
 			}
-		    }
-                    signed char move_x = mouse_packet[1];
-                    signed char move_y = mouse_packet[2];
-                    mouse_x += move_x;
-                    mouse_y -= move_y;
-                    if (mouse_x < 0)    mouse_x = 0;
-                    if (mouse_x > 1272) mouse_x = 1272;
-                    if (mouse_y < 0)    mouse_y = 0;
-                    if (mouse_y > 1016) mouse_y = 1016;
-		    for (int x = 0; x < 8; x++) {
- 			for (int y = 0; y < 8; y++) {
-				unsigned int* vram32 = (unsigned int*)video_memory;
-				int screen_offset = ((mouse_y + y) * (screen_pitch / 4)) + (mouse_x + x);
-				mouse_bg_buffer[y * 8 + x] = vram32[screen_offset]; 
+		} if (current_scancode != 0) {
+			data = current_scancode;
+			current_scancode = 0;
+			if (data == 59) {
+				draw_os(video_memory, 640, 512, 0, 0, 255);
+				install_to_disk();
+				draw_os(video_memory, 640, 512, 255, 0, 0);
+			} else if (data == 56) {
+				alt_pressed = 1;
+			} else if (data == 184) {
+				alt_pressed = 0;
+			} if (data == 62 && alt_pressed == 1) {
+				menu_open = 1;
+				draw_window(video_memory, &win[0]);
+				draw_off_menu(video_memory);
+				draw_rect(video_memory, 500, 565, 100, 4, 0, 120, 212);
+			} if (menu_open == 1) {
+				if (data == 28) {
+					while (inb(0x64) & 2) { io_wait(); }
+					outb(0x64, 0xFE);
+				} else if (data == 1) {
+					menu_open = 0;
+					render(video_memory, (struct superblock*)0x15800);
+					draw_cursor(video_memory, mouse_x, mouse_y);
+				} else if (data == 77) {
+					draw_rect(video_memory, 500, 565, 100, 4, 255, 255, 255);
+					draw_rect(video_memory, 750, 565, 100, 4, 0, 120, 212);
+				} else if (data == 75) {
+					draw_rect(video_memory, 750, 565, 100, 4, 255, 255, 255);
+					draw_rect(video_memory, 500, 565, 100, 4, 0, 120, 212);
+				}
 			}
-		    }
-                    draw_cursor(video_memory, mouse_x, mouse_y);
-                }
-            }
-        } if (current_scancode != 0) {
-	    data = current_scancode;
-            current_scancode = 0;
-            if (data == 56) {
-                alt_pressed = 1;
-            } else if (data == 184) {
-                alt_pressed = 0;
-            } if (data == 62 && alt_pressed == 1) {
-                menu_open = 1;
-                draw_rect(video_memory, 640, 512, 50, 50, 255, 255, 255);
-            } if (menu_open == 1) {
-                if (data == 28) {
-                    while (inb(0x64) & 2) { io_wait(); }
-                    outb(0x64, 0xFE);
-                } else if (data == 1) {
-                    menu_open = 0;
-                    render(video_memory, (struct superblock*)0x15800);
-                    draw_window(video_memory, &win);
-                    draw_cursor(video_memory, mouse_x, mouse_y);
-                }
-            }
+		}
+		draw_time(video_memory);
+		io_wait(); 
 	}
-        io_wait(); 
-    }
 }
-

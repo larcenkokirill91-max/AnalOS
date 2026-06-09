@@ -60,6 +60,7 @@ unsigned short inw(unsigned short port) {
 	asm volatile("inw %1, %0" : "=a"(result) : "Nd"(port));
 	return result;
 }
+
 void cpu_halt(void) {
     asm volatile("hlt");
 }
