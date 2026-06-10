@@ -44,7 +44,13 @@ void draw_pixel(int index, unsigned int color) {
 	unsigned int *fb = (unsigned int *)0xFD000000;
 	fb[index] = color;
 }
-void (*draw_digit[10])(unsigned char*, int, int, unsigned char, unsigned char, unsigned char) = {
-        draw_zero, draw_one, draw_two, draw_three, draw_four,
-        draw_five, draw_six, draw_seven, draw_eight, draw_nine
-};
+static inline void outl(unsigned short port, unsigned int val) {
+    __asm__ __volatile__("outl %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline unsigned int inl(unsigned short port) {
+    unsigned int ret;
+    __asm__ __volatile__("inl %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+

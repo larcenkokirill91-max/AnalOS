@@ -1,4 +1,4 @@
-unsigned int mouse_bg_buffer[64];
+unsigned int mouse_bg_buffer[256];
 int alt_pressed = 0;
 int menu_open = 0;
 int mouse_x = 640;
