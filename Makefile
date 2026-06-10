@@ -38,8 +38,11 @@ math.o: src/math.c
 start_menu.o: src/start_menu.c
 	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c src/start_menu.c -o start_menu.o
 
-kernel.bin: kernel.o screen.o keyboard.o disk.o window.o idt.o time.o font.o math.o start_menu.o linker.ld
-	ld -m elf_i386 --oformat binary -T linker.ld -o kernel.bin kernel.o screen.o keyboard.o disk.o window.o idt.o time.o font.o math.o start_menu.o
+lib.o: lib/lib.c
+	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c lib/lib.c -o lib.o
+
+kernel.bin: kernel.o screen.o keyboard.o disk.o window.o idt.o time.o font.o math.o start_menu.o lib.o linker.ld
+	ld -m elf_i386 --oformat binary -T linker.ld -o kernel.bin kernel.o screen.o keyboard.o disk.o window.o idt.o time.o font.o math.o start_menu.o lib.o
 	sudo cp kernel.bin /srv/tftp/kernel.bin
 
 os-image.img: boot.bin kernel.bin
