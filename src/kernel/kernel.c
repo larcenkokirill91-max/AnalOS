@@ -56,39 +56,21 @@ void kernel_main(void);
 extern unsigned char current_scancode;
 unsigned int screen_pitch = 5120;
 void sys_shutdown(void) {
-    // 1. Жёсткое выключение по спецификации Intel ICH7/ICH8 через PCI порты
-    // Задаем адрес регистра управления питанием в Южном мосту
     outl(0xCF8, 0x8000F840); 
     io_wait();
-    
-    // Считываем базовый адрес портов управления питанием (PMBASE)
     unsigned int pmbase = inl(0xCFC) & 0xFFFE;
     io_wait();
-    
     if (pmbase != 0) {
-        // Вычисляем точный адрес порта PM1_CNT (PMBASE + 0x04)
         unsigned short pm1_cnt_port = (unsigned short)(pmbase + 0x04);
-        
-        // Маска S5 (Power Off) для чипсетов Intel: взводим 10, 11, 12 биты (состояние S5) 
-        // и 13 бит (SLP_EN - запустить укладывание спать)
-        // Число 0x3C00 - это чистый, железобетонный канон Intel для полного отключения БП!
         outw(pm1_cnt_port, 0x3C00);
         io_wait();
-        
-        // Подстраховка: если плата требует старый формат маски
         outw(pm1_cnt_port, 0x2000 | 0x1C00);
         io_wait();
     }
-
-    // 2. Если PCI-метод не сработал, бьем по APM контроллеру питания
     outw(0xB2, 0x07);
     io_wait();
-    
-    // На случай, если тестируешь в эмуляторе
     outw(0x604, 0x2000);
     io_wait();
-
-    // Финальный барьер останова процессора
     __asm__ __volatile__("cli; hlt");
 }
 
@@ -138,7 +120,16 @@ void kernel_main(void) {
 				mouse_cycle++;
 				if (mouse_cycle == 3) {
 					mouse_cycle = 0;
-					if ((mouse_packet[0] & 0x08) == 0) continue;
+					if ((mouse_packet[0] & 0x08) == 0) { continue; 
+					} else if (mouse_x >= 630 && mouse_y >= 995 && mouse_x <= 675 && mouse_y <= 1020 && (mouse_packet[0] & 0x01) == 1) {
+						draw_rect(video_memory, 629, 1000, 48, 17, 0, 0, 0);
+						draw_rect(video_memory, 636, 993, 33, 32, 0, 0, 0);
+						draw_circle(video_memory, 637, 1001, 8, 0, 0, 0);  //lt
+						draw_circle(video_memory, 668, 1001 , 8, 0, 0, 0); //rt
+						draw_circle(video_memory, 637, 1016, 8, 0, 0, 0);  //lb
+						draw_circle(video_memory, 668, 1016, 8, 0, 0, 0);  //rb
+						draw_start(video_memory, 650, 995);
+					}
 					for (int x = 0; x < 16; x++) {
 						for (int y = 0; y < 16; y++) {
 							unsigned int* vram32 = (unsigned int*)video_memory;
