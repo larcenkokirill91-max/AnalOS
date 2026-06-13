@@ -43,7 +43,6 @@ lib.o: lib/lib.c
 
 kernel.bin: kernel.o screen.o keyboard.o disk.o window.o idt.o time.o font.o math.o start_menu.o lib.o linker.ld
 	ld -m elf_i386 --oformat binary -T linker.ld -o kernel.bin kernel.o screen.o keyboard.o disk.o window.o idt.o time.o font.o math.o start_menu.o lib.o
-	sudo cp kernel.bin /srv/tftp/kernel.bin
 
 os-image.img: boot.bin kernel.bin
 	cat boot.bin kernel.bin > os-image.img
@@ -55,12 +54,12 @@ os-image.img: boot.bin kernel.bin
 # АВТОМАТИЧЕСКИЙ ДЕПЛОЙ В СЕТЕВУЮ ПАПКУ
 # ==============================================================================
 run: os-image.img
-	# 1. Сносим старый образ из сети, чтобы роутер его не кэшировал
-	rm -f $(TFTP_DIR)/os-image.img
-	# 2. Копируем свежую сборку образа и ЧИСТОГО ядра для флешки!
-	cp os-image.img $(TFTP_DIR)/os-image.img
-	# 3. Перезапускаем dnsmasq, чтобы обновить сетевую сессию
-	-sudo systemctl restart dnsmasq
+#	 1. Сносим старый образ из сети, чтобы роутер его не кэшировал
+#	rm -f $(TFTP_DIR)/os-image.img
+#	 2. Копируем свежую сборку образа и ЧИСТОГО ядра для флешки!
+#	cp os-image.img $(TFTP_DIR)/os-image.img
+#	 3. Перезапускаем dnsmasq, чтобы обновить сетевую сессию
+#	-sudo systemctl restart dnsmasq
 
 clean:
 	rm -f *.bin *.o *.img qemu.log
