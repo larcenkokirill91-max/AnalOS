@@ -10,3 +10,4 @@ int h = 0, m = 0, s = 0;
 int last_s = -1;
 int last_m = -1;
 int last_h = -1;
+int start_menu_open = 0;

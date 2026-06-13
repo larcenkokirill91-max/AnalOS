@@ -78,7 +78,7 @@ void sys_shutdown(void) {
 void render(unsigned char* video_memory, struct superblock* fs) {
 	draw_rect(video_memory, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 69, 178, 253);
 	draw_rect(video_memory, 0, 990, SCREEN_WIDTH, 40, 229, 236, 253);
-	draw_start(video_memory, 650, 995);
+	draw_start(video_memory, 650, 992, 0, 120, 212);
 	if (fs->magic == 0x1337) {
 		draw_os(video_memory, 640, 512, 0, 0, 0);     
 	} else {
@@ -122,13 +122,18 @@ void kernel_main(void) {
 					mouse_cycle = 0;
 					if ((mouse_packet[0] & 0x08) == 0) { continue; 
 					} else if (mouse_x >= 630 && mouse_y >= 995 && mouse_x <= 675 && mouse_y <= 1020 && (mouse_packet[0] & 0x01) == 1) {
-						draw_rect(video_memory, 629, 1000, 48, 17, 255, 255, 255);
-						draw_rect(video_memory, 636, 993, 33, 32, 255, 255, 255);
-						draw_circle(video_memory, 637, 1001, 8, 255, 255, 255);  //lt
-						draw_circle(video_memory, 668, 1001 , 8, 255, 255, 255); //rt
-						draw_circle(video_memory, 637, 1016, 8, 255, 255, 255);  //lb
-						draw_circle(video_memory, 668, 1016, 8, 255, 255, 255);  //rb
-						draw_start(video_memory, 650, 995);
+						start_menu_open = 1;
+						draw_rect(video_memory, 631, 992, 36, 36, 255, 255, 255);
+						draw_rect(video_memory, 633, 990, 36, 36, 255, 255, 255);
+						draw_circle(video_memory, 635, 992, 2, 255, 255, 255);  //lt
+						draw_circle(video_memory, 667, 992, 2, 255, 255, 255); //rt
+						draw_circle(video_memory, 635, 1024, 2, 255, 255, 255);  //lb
+						draw_circle(video_memory, 667, 1024, 2, 255, 255, 255);  //rb
+						draw_start(video_memory, 650, 992, 10, 135, 215);
+					} else if ((mouse_x <= 630 || mouse_y <= 995 || mouse_x >= 675 || mouse_y >= 1020) && (mouse_packet[0] & 0x01) == 1 && start_menu_open == 1) {
+						start_menu_open = 0;
+						draw_rect(video_memory, 0, 990, SCREEN_WIDTH, 40, 229, 236, 253);
+						draw_start(video_memory, 650, 992, 0, 120, 212);
 					}
 					for (int x = 0; x < 16; x++) {
 						for (int y = 0; y < 16; y++) {
@@ -174,12 +179,12 @@ void kernel_main(void) {
 				draw_rect(video_memory, 500, 565, 100, 4, 0, 120, 212);
 			} if (menu_open == 1) {
 				if (data == 28) {
-                                        if (selected_option == 1) {
-                                                sys_shutdown();
-                                        } else {
-                                                while (inb(0x64) & 2) { io_wait(); }
-                                                outb(0x64, 0xFE);
-                                        }
+                    if (selected_option == 1) {
+                        sys_shutdown();
+                    } else {
+                        while (inb(0x64) & 2) { io_wait(); }
+                        outb(0x64, 0xFE);
+                    }
 				} else if (data == 1) {
 					menu_open = 0;
 					render(video_memory, (struct superblock*)0x15800);
