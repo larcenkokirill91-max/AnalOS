@@ -1,5 +1,6 @@
 #include "../keyboard/keyboard.h"
 #include "../screen/screen.h"
+#include "ehci.h"
 
 static inline void outsl(int port, const void *addr, int cnt) {
     __asm__ __volatile__("cld; rep outsl" : "+S"(addr), "+c"(cnt) : "d"(port));

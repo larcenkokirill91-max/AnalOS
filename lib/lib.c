@@ -44,3 +44,10 @@ static inline unsigned int inl(unsigned short port) {
     unsigned int ret;
     __asm__ __volatile__("inl %1, %0" : "=a"(ret) : "Nd"(port));
     return ret;}
+void memcpy(void *dest, const void *src, int n) {
+    unsigned char* d = (unsigned char *)dest;
+    unsigned char* s = (unsigned char *)src;
+    for (int i = 0; i < n; i ++) {
+        d[i] = s[i];
+    }
+}
