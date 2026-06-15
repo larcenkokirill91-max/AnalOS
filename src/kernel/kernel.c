@@ -131,47 +131,32 @@ __attribute__((section(".text.entry")))
 void kernel_main(void) {
 	unsigned int* video_memory32 = (unsigned int*)0xD0000000; 
 	struct superblock* fs = (struct superblock*)0x15800;
-	
-	// Первичный вывод обоев и интерфейса напрямую на экран
 	render((unsigned char*)video_memory32, fs);
-	
-	// Выделяем теневой бэк-буфер для сохранения подложки окон (макс размер 500x300)
 	unsigned int* window_bg_buffer = (unsigned int*)0x01000000;
-	// Буфер для сохранения фона под 16x16 курсором мыши
 	unsigned int* mouse_bg_buffer_local = (unsigned int*)0x01100000;
-	
 	int win_bg_saved = 0; 
 	int pitch_dw = screen_pitch / 4; 
-	unsigned int time_counter = 0; // Счетчик циклов для оптимизации опроса часов
-
-	// ИСПРАВЛЕНО: Восстановлен массив из 3 окон
+	unsigned int time_counter = 0;
 	struct window win[3];
 	win[0].lt.x = 450;  win[0].lt.y = 400;
 	win[0].width = 450; win[0].height = 200;
 	win[0].is_visible = 0; 
-
 	win[1].lt.x = 450;  win[1].lt.y = 300;
 	win[1].width = 400; win[1].height = 250;
 	win[1].is_visible = 0;
-
 	win[2].lt.x = 900;  win[2].lt.y = 600;
 	win[2].width = 300; win[2].height = 150;
 	win[2].is_visible = 0;
-	
-	// Первичное сохранение подложки мыши на старте
 	for (int y = 0; y < 16; y++) {
 		for (int x = 0; x < 16; x++) {
 			mouse_bg_buffer_local[y * 16 + x] = video_memory32[(mouse_y + y) * pitch_dw + (mouse_x + x)];
 		}
 	}
 	draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
-
 	unsigned char selected_option = 0;
 	static unsigned char prev_left_button = 0; 
-	
 	mouse_init();
 	idt_init();
-
 	while(1) {
 		unsigned char status = inb(0x64);
 		io_wait();
@@ -184,23 +169,17 @@ void kernel_main(void) {
 				mouse_cycle++;
 				if (mouse_cycle == 3) {
 					mouse_cycle = 0;
-					// ИСПРАВЛЕНО: Добавлены индексы массива, [1], [2] для пакетов мыши
 					if ((mouse_packet[0] & 0x08) == 0) { continue; }
-					
-					// 1. ПРЕФЛИП МЫШИ: Восстанавливаем чистый фон под старой позицией мыши
 					for (int y = 0; y < 16; y++) {
 						for (int x = 0; x < 16; x++) {
 							video_memory32[(mouse_y + y) * pitch_dw + (mouse_x + x)] = mouse_bg_buffer_local[y * 16 + x];
 						}
 					}
-					
 					signed char move_x = mouse_packet[1];
 					signed char move_y = mouse_packet[2];
 					unsigned char left_button = (mouse_packet[0] & 0x01);
-					
 					int old_win_x = 0, old_win_y = 0, win_w = 0, win_h = 0;
 					int window_moved = 0;
-
 					if (left_button == 1) {
 						if (prev_left_button == 0 && dragged_window_idx == -1 && start_menu_open == 0) {
 							for (int i = 0; i < 3; i++) {
@@ -216,9 +195,10 @@ void kernel_main(void) {
 							old_win_x = win[dragged_window_idx].lt.x;
 							old_win_y = win[dragged_window_idx].lt.y;
 							win_w = win[dragged_window_idx].width;
-							win_h = win[dragged_window_idx].height + WIN_HH;
+							win_h = win[dragged_window_idx].height + WIN_HH; // Полная высота окна с телом
 							window_moved = 1;
 
+							// Если на прошлом шаге под всем окном сохранялся фон, возвращаем его на экран
 							if (win_bg_saved == 1) {
 								for (int wy = 0; wy < win_h; wy++) {
 									for (int wx = 0; wx < win_w; wx++) {
@@ -226,9 +206,11 @@ void kernel_main(void) {
 									}
 								}
 							} else {
+								// Если это самый первый шаг захвата, затираем всю площадь десктопом
 								draw_rect((unsigned char*)video_memory32, old_win_x, old_win_y, win_w, win_h, 69, 178, 253);
 							}
 
+							// Двигаем координаты структуры окна
 							win[dragged_window_idx].lt.x += move_x;
 							win[dragged_window_idx].lt.y -= move_y;
 						}
@@ -237,6 +219,7 @@ void kernel_main(void) {
 						win_bg_saved = 0;
 					}
 
+					// Сдвигаем координаты маркера мыши
 					mouse_x += move_x;
 					mouse_y -= move_y;
 					if (mouse_x < 0)    mouse_x = 0;
@@ -270,17 +253,20 @@ void kernel_main(void) {
 						}
 					}
 
-					// 2. ПОСТФЛИП ОКНА: Если оно двигалось, сохраняем подложку и рендерим
+					// 2. ПОСТФЛИП ОКНА: Если оно двигалось, сохраняем подложку всей площади и рендерим
 					if (dragged_window_idx != -1 && window_moved) {
 						int new_x = win[dragged_window_idx].lt.x;
 						int new_y = win[dragged_window_idx].lt.y;
 
+						// Сохраняем фон под всей новой позицией (включая тело окна win_h)
 						for (int wy = 0; wy < win_h; wy++) {
 							for (int wx = 0; wx < win_w; wx++) {
 								window_bg_buffer[wy * win_w + wx] = video_memory32[(new_y + wy) * pitch_dw + (new_x + wx)];
 							}
 						}
 						win_bg_saved = 1;
+						
+						// Вызываем отрисовку окна. Оно должно отрисовать и шапку, и тело по новым координатам
 						draw_window((unsigned char*)video_memory32, &win[dragged_window_idx]);
 					}
 
@@ -312,7 +298,7 @@ void kernel_main(void) {
 			if (data == 62 && alt_pressed == 1) {
 				menu_open = 1;
 				selected_option = 0;
-				win[0].is_visible = 1; // Исправлен индекс для массива окон
+				win[0].is_visible = 1;
 				draw_window((unsigned char*)video_memory32, &win[0]);
 				draw_off_menu((unsigned char*)video_memory32);
 				draw_rect((unsigned char*)video_memory32, 500, 565, 100, 4, 0, 120, 212);
