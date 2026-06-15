@@ -88,7 +88,9 @@ void render(unsigned char* video_memory, struct superblock* fs) {
 __attribute__((section(".text.entry")))
 void kernel_main(void) {
 	unsigned char* video_memory = (unsigned char*)0xD0000000; 
-	render(video_memory, (struct superblock*)0x15800);
+	struct superblock* fs = (struct superblock*)0x15800;
+	render(video_memory, fs);
+	
 	for (int x = 0; x < 16; x++) {
 		for (int y = 0; y < 16; y++) {
 			unsigned int* vram32 = (unsigned int*)video_memory;
@@ -112,9 +114,11 @@ void kernel_main(void) {
 	
 	draw_cursor(video_memory, mouse_x, mouse_y);
 	unsigned char selected_option = 0;
-	static unsigned char prev_left_button = 0; // Состояние ЛКМ на предыдущем шаге
+	static unsigned char prev_left_button = 0; 
+	
 	mouse_init();
 	idt_init();
+	
 	while(1) {
 		unsigned char status = inb(0x64);
 		io_wait();
@@ -127,10 +131,9 @@ void kernel_main(void) {
 				mouse_cycle++;
 				if (mouse_cycle == 3) {
 					mouse_cycle = 0;
-					if ((mouse_packet[0] & 0x08) == 0) { continue; 
-					} 
+					if ((mouse_packet[0] & 0x08) == 0) { continue; }
 					
-					// Восстанавливаем старый фон под курсором мыши на старой позиции
+					// Восстанавливаем фон под мышью в её СТАРОЙ позиции
 					for (int x = 0; x < 16; x++) {
 						for (int y = 0; y < 16; y++) {
 							unsigned int* vram32 = (unsigned int*)video_memory;
@@ -138,21 +141,35 @@ void kernel_main(void) {
 							vram32[screen_offset] = mouse_bg_buffer[y * 16 + x]; 
 						}
 					}
-
-					if (mouse_x >= 630 && mouse_y >= 995 && mouse_x <= 675 && mouse_y <= 1020 && (mouse_packet[0] & 0x01) == 1) {
-						start_menu_open = 1;
-						draw_rect(video_memory, 631, 992, 36, 36, 255, 255, 255);
-						draw_rect(video_memory, 633, 990, 36, 36, 255, 255, 255);
-						draw_circle(video_memory, 635, 992, 2, 255, 255, 255);  
-						draw_circle(video_memory, 667, 992, 2, 255, 255, 255); 
-						draw_circle(video_memory, 635, 1024, 2, 255, 255, 255);  
-						draw_circle(video_memory, 667, 1024, 2, 255, 255, 255);  
-						draw_start(video_memory, 650, 992, 10, 135, 215);
-						draw_rect(video_memory, 400, 300, 500, 680, 255, 255, 255);
-					} else if ((mouse_x <= 630 || mouse_y <= 995 || mouse_x >= 675 || mouse_y >= 1020) && (mouse_packet[0] & 0x01) == 1 && start_menu_open == 1) {
+					
+					if (mouse_x >= 630 && mouse_y >= 995 && mouse_x <= 675 && mouse_y <= 1020 && (mouse_packet[0] & 0x01) == 1 && prev_left_button == 0) {
+						if (start_menu_open == 0) {
+							start_menu_open = 1;
+							draw_rect(video_memory, 631, 992, 36, 36, 255, 255, 255);
+							draw_rect(video_memory, 633, 990, 36, 36, 255, 255, 255);
+							draw_circle(video_memory, 635, 992, 2, 255, 255, 255);  
+							draw_circle(video_memory, 667, 992, 2, 255, 255, 255); 
+							draw_circle(video_memory, 635, 1024, 2, 255, 255, 255);  
+							draw_circle(video_memory, 667, 1024, 2, 255, 255, 255);  
+							draw_start(video_memory, 650, 992, 10, 135, 215);
+							draw_rect(video_memory, 400, 300, 500, 680, 255, 255, 255);
+						} else {
+							start_menu_open = 0;
+							// Быстро затираем только область меню пуск синим цветом
+							draw_rect(video_memory, 400, 300, 500, 680, 69, 178, 253);
+							draw_rect(video_memory, 0, 990, SCREEN_WIDTH, 40, 229, 236, 253);
+							draw_start(video_memory, 650, 992, 0, 120, 212);
+							// Перерисовываем логотип, если закрыли пуск
+							if (fs->magic == 0x15800) draw_os(video_memory, 640, 512, 0, 0, 0);
+							else draw_os(video_memory, 640, 512, 255, 0, 0);
+						}
+					} else if ((mouse_x <= 630 || mouse_y <= 995 || mouse_x >= 675 || mouse_y >= 1020) && (mouse_packet[0] & 0x01) == 1 && prev_left_button == 0 && start_menu_open == 1) {
 						start_menu_open = 0;
+						draw_rect(video_memory, 400, 300, 500, 680, 69, 178, 253);
 						draw_rect(video_memory, 0, 990, SCREEN_WIDTH, 40, 229, 236, 253);
 						draw_start(video_memory, 650, 992, 0, 120, 212);
+						if (fs->magic == 0x15800) draw_os(video_memory, 640, 512, 0, 0, 0);
+						else draw_os(video_memory, 640, 512, 255, 0, 0);
 					}
 					
 					signed char move_x = mouse_packet[1];
@@ -160,7 +177,7 @@ void kernel_main(void) {
 					unsigned char left_button = (mouse_packet[0] & 0x01);
 					
 					if (left_button == 1) {
-						// Захватываем окно только если клик произошел в этот момент (прошлое состояние ЛКМ было 0)
+						// Захват окна строго по первому клику на чёлке
 						if (prev_left_button == 0 && dragged_window_idx == -1) {
 							for (int i = 0; i < 3; i++) {
 								if (win[i].is_visible && mouse_x >= win[i].lt.x && mouse_x <= (win[i].lt.x + win[i].width) && mouse_y >= win[i].lt.y && mouse_y <= (win[i].lt.y + WIN_HH)) {
@@ -171,14 +188,35 @@ void kernel_main(void) {
 						}
 						
 						if (dragged_window_idx != -1) {
-							// Очищаем старое место окна с учетом высоты заголовка (height + WIN_HH)
-							draw_rect(video_memory, win[dragged_window_idx].lt.x, win[dragged_window_idx].lt.y, win[dragged_window_idx].width, win[dragged_window_idx].height + WIN_HH, 69, 178, 253);
+							int old_x = win[dragged_window_idx].lt.x;
+							int old_y = win[dragged_window_idx].lt.y;
+							int old_w = win[dragged_window_idx].width;
+							int old_h = win[dragged_window_idx].height + WIN_HH;
+
+							// Зарисовываем старое положение окна цветом десктопа
+							draw_rect(video_memory, old_x, old_y, old_w, old_h, 69, 178, 253);
 							
-							// Двигаем окно
+							// ТОЧЕЧНАЯ ПЕРЕРИСОВКА: проверяем, затирает ли след окна другие объекты
+							// Проверка на логотип ОС
+							if (old_x < 800 && (old_x + old_w) > 480 && old_y < 650 && (old_y + old_h) > 380) {
+								if (fs->magic == 0x15800) draw_os(video_memory, 640, 512, 0, 0, 0);
+								else draw_os(video_memory, 640, 512, 255, 0, 0);
+							}
+							// Проверка на Панель задач
+							if ((old_y + old_h) >= 990) {
+								draw_rect(video_memory, 0, 990, SCREEN_WIDTH, 40, 229, 236, 253);
+								if (start_menu_open == 0) draw_start(video_memory, 650, 992, 0, 120, 212);
+							}
+							// Проверка на Меню пуск
+							if (start_menu_open == 1 && old_x < 900 && (old_x + old_w) > 400 && old_y < 980 && (old_y + old_h) > 300) {
+								draw_rect(video_memory, 400, 300, 500, 680, 255, 255, 255);
+							}
+
+							// Двигаем текущее окно
 							win[dragged_window_idx].lt.x += move_x;
 							win[dragged_window_idx].lt.y -= move_y;
 							
-							// Рисуем заново все видимые окна
+							// Рисуем заново все видимые окна поверх следа
 							for (int i = 0; i < 3; i++) {
 								if (win[i].is_visible) {
 									draw_window(video_memory, &win[i]); 
@@ -189,9 +227,9 @@ void kernel_main(void) {
 						dragged_window_idx = -1;
 					}
 					
-					prev_left_button = left_button; // Обновляем состояние кнопки
+					prev_left_button = left_button; 
 					
-					// Двигаем маркер координат мыши
+					// Обновляем координаты мыши
 					mouse_x += move_x;
 					mouse_y -= move_y;
 					if (mouse_x < 0)    mouse_x = 0;
@@ -207,7 +245,7 @@ void kernel_main(void) {
 							mouse_bg_buffer[y * 16 + x] = vram32[screen_offset]; 
 						}
 					}
-					// Рисуем курсор поверх обновленной области
+					// Отрисовка курсора 
 					draw_cursor(video_memory, mouse_x, mouse_y);
 				}
 			}
@@ -229,7 +267,6 @@ void kernel_main(void) {
 				menu_open = 1;
 				selected_option = 0;
 				
-				// Открываем тестовое окно [0] по кнопке F4
 				win[0].is_visible = 1; 
 				draw_window(video_memory, &win[0]);
 				
@@ -246,8 +283,7 @@ void kernel_main(void) {
 					}
 				} else if (data == 1) {
 					menu_open = 0;
-					render(video_memory, (struct superblock*)0x15800);
-					// Восстанавливаем окна, если они видимы
+					render(video_memory, fs);
 					for (int i = 0; i < 3; i++) {
 						if (win[i].is_visible) draw_window(video_memory, &win[i]);
 					}
