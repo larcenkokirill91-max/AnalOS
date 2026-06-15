@@ -142,7 +142,9 @@ void kernel_main(void) {
 	
 	int win_bg_saved = 0; 
 	int pitch_dw = screen_pitch / 4; 
+	unsigned int time_counter = 0; // Счетчик циклов для оптимизации опроса часов
 
+	// ИСПРАВЛЕНО: Восстановлен массив из 3 окон
 	struct window win[3];
 	win[0].lt.x = 450;  win[0].lt.y = 400;
 	win[0].width = 450; win[0].height = 200;
@@ -169,7 +171,7 @@ void kernel_main(void) {
 	
 	mouse_init();
 	idt_init();
-	
+
 	while(1) {
 		unsigned char status = inb(0x64);
 		io_wait();
@@ -182,9 +184,10 @@ void kernel_main(void) {
 				mouse_cycle++;
 				if (mouse_cycle == 3) {
 					mouse_cycle = 0;
+					// ИСПРАВЛЕНО: Добавлены индексы массива, [1], [2] для пакетов мыши
 					if ((mouse_packet[0] & 0x08) == 0) { continue; }
 					
-					// 1. ПРЕФЛИП МЫШИ: Мгновенно восстанавливаем чистый фон под старой позицией мыши
+					// 1. ПРЕФЛИП МЫШИ: Восстанавливаем чистый фон под старой позицией мыши
 					for (int y = 0; y < 16; y++) {
 						for (int x = 0; x < 16; x++) {
 							video_memory32[(mouse_y + y) * pitch_dw + (mouse_x + x)] = mouse_bg_buffer_local[y * 16 + x];
@@ -195,7 +198,6 @@ void kernel_main(void) {
 					signed char move_y = mouse_packet[2];
 					unsigned char left_button = (mouse_packet[0] & 0x01);
 					
-					// Запоминаем старые координаты окна для отката подложки
 					int old_win_x = 0, old_win_y = 0, win_w = 0, win_h = 0;
 					int window_moved = 0;
 
@@ -204,7 +206,7 @@ void kernel_main(void) {
 							for (int i = 0; i < 3; i++) {
 								if (win[i].is_visible && mouse_x >= win[i].lt.x && mouse_x <= (win[i].lt.x + win[i].width) && mouse_y >= win[i].lt.y && mouse_y <= (win[i].lt.y + WIN_HH)) {
 									dragged_window_idx = i;
-									win_bg_saved = 0; // Сброс буфера для нового захвата
+									win_bg_saved = 0; 
 									break;  
 								}
 							}
@@ -217,7 +219,6 @@ void kernel_main(void) {
 							win_h = win[dragged_window_idx].height + WIN_HH;
 							window_moved = 1;
 
-							// Если на прошлом шаге под окном сохранялся фон, выплёскиваем его обратно на экран (стираем окно)
 							if (win_bg_saved == 1) {
 								for (int wy = 0; wy < win_h; wy++) {
 									for (int wx = 0; wx < win_w; wx++) {
@@ -225,11 +226,9 @@ void kernel_main(void) {
 									}
 								}
 							} else {
-								// Если это самый первый шаг захвата, просто перекрываем синим
 								draw_rect((unsigned char*)video_memory32, old_win_x, old_win_y, win_w, win_h, 69, 178, 253);
 							}
 
-							// Сдвигаем окно
 							win[dragged_window_idx].lt.x += move_x;
 							win[dragged_window_idx].lt.y -= move_y;
 						}
@@ -238,7 +237,6 @@ void kernel_main(void) {
 						win_bg_saved = 0;
 					}
 
-					// Сдвигаем мышь
 					mouse_x += move_x;
 					mouse_y -= move_y;
 					if (mouse_x < 0)    mouse_x = 0;
@@ -272,33 +270,28 @@ void kernel_main(void) {
 						}
 					}
 
-					// 2. ПОСТФЛИП ОКНА: Если окно двигалось, сохраняем подложку на новом месте и рендерим его
+					// 2. ПОСТФЛИП ОКНА: Если оно двигалось, сохраняем подложку и рендерим
 					if (dragged_window_idx != -1 && window_moved) {
 						int new_x = win[dragged_window_idx].lt.x;
 						int new_y = win[dragged_window_idx].lt.y;
 
-						// Запоминаем чистый фон из-под новой позиции окна в теневой буфер ОЗУ
 						for (int wy = 0; wy < win_h; wy++) {
 							for (int wx = 0; wx < win_w; wx++) {
 								window_bg_buffer[wy * win_w + wx] = video_memory32[(new_y + wy) * pitch_dw + (new_x + wx)];
 							}
 						}
 						win_bg_saved = 1;
-
-						// Рисуем само окно поверх сохраненного кадра
 						draw_window((unsigned char*)video_memory32, &win[dragged_window_idx]);
 					}
 
 					prev_left_button = left_button; 
 
-					// 3. ПОСТФЛИП МЫШИ: Сохраняем фон под новой позицией мыши (там уже может быть кусок нового окна)
+					// 3. ПОСТФЛИП МЫШИ: Сохраняем фон под новой позицией мыши
 					for (int y = 0; y < 16; y++) {
 						for (int x = 0; x < 16; x++) {
 							mouse_bg_buffer_local[y * 16 + x] = video_memory32[(mouse_y + y) * pitch_dw + (mouse_x + x)];
 						}
 					}
-
-					// Накладываем курсор мыши самым последним слоем на экран
 					draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
 				}
 			}
@@ -319,7 +312,7 @@ void kernel_main(void) {
 			if (data == 62 && alt_pressed == 1) {
 				menu_open = 1;
 				selected_option = 0;
-				win[0].is_visible = 1; // Исправлено для работы с массивом окон
+				win[0].is_visible = 1; // Исправлен индекс для массива окон
 				draw_window((unsigned char*)video_memory32, &win[0]);
 				draw_off_menu((unsigned char*)video_memory32);
 				draw_rect((unsigned char*)video_memory32, 500, 565, 100, 4, 0, 120, 212);
@@ -338,7 +331,6 @@ void kernel_main(void) {
 					for (int i = 0; i < 3; i++) {
 						if (win[i].is_visible) draw_window((unsigned char*)video_memory32, &win[i]);
 					}
-					// Пересохраняем фон мыши после перерисовки сцены
 					for (int y = 0; y < 16; y++) {
 						for (int x = 0; x < 16; x++) {
 							mouse_bg_buffer_local[y * 16 + x] = video_memory32[(mouse_y + y) * pitch_dw + (mouse_x + x)];
@@ -357,17 +349,29 @@ void kernel_main(void) {
 			}
 		}
 		
-		// Обновляем часы на экране
-		int old_m = last_m;
-		draw_time((unsigned char*)video_memory32);
-		if (last_m != old_m) {
-			// Если часы тикнули и затерли мышь, пересохраняем её буфер
-			for (int y = 0; y < 16; y++) {
-				for (int x = 0; x < 16; x++) {
-					mouse_bg_buffer_local[y * 16 + x] = video_memory32[(mouse_y + y) * pitch_dw + (mouse_x + x)];
+		time_counter++;
+		if (time_counter >= 4000) {
+			time_counter = 0;
+			int mouse_on_clock = (mouse_x >= 1170 && mouse_y >= 990);
+			if (mouse_on_clock) {
+				for (int y = 0; y < 16; y++) {
+					for (int x = 0; x < 16; x++) {
+						video_memory32[(mouse_y + y) * pitch_dw + (mouse_x + x)] = mouse_bg_buffer_local[y * 16 + x];
+					}
 				}
 			}
-			draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
+
+			int old_m = last_m;
+			draw_time((unsigned char*)video_memory32);
+			
+			if (mouse_on_clock) {
+				for (int y = 0; y < 16; y++) {
+					for (int x = 0; x < 16; x++) {
+						mouse_bg_buffer_local[y * 16 + x] = video_memory32[(mouse_y + y) * pitch_dw + (mouse_x + x)];
+					}
+				}
+				draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
+			}
 		}
 		io_wait(); 
 	}
