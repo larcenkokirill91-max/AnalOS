@@ -10,4 +10,10 @@ struct superblock {
     struct disk_file files[10];
     unsigned int magic;
 } __attribute__((packed));
+struct arhive_header{
+    char name[32];
+    unsigned int size;
+    unsigned char padding[28];
+}__attribute__((packed));
+void unpack_update_archive(void);
 #endif

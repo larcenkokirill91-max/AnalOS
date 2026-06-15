@@ -36,20 +36,45 @@ start:
     mov dl, [boot_drive]
     int 0x13
 
-    ; === МОНОЛИТНОЕ ЧТЕНИЕ ВСЕГО ОБРАЗА ===
-    push dword 0        ; Старшие 4 байта LBA (нули)
-    push dword 1        ; Стартуем со 1-го сектора (сразу за MBR)
-    push word 0x1000    ; Сегмент памяти (0x1000 * 16 = 0x10000)
-    push word 0x0000    ; Смещение памяти (0x0000)
-    push word 50        ; Скачиваем 50 секторов (Ядро и ФС)
-    push word 0x0010    ; Размер структуры DAP
+    ; === ЧТЕНИЕ ЯДРА НА ГОДЫ ВПЕРЕД (Читаем 1000 секторов = ~500 КБ) ===
+    mov cx, 10          ; 10 порций * 100 секторов = 1000 секторов ТОТАЛ!
+    mov bx, 0x1000      ; Стартовый сегмент памяти (0x1000)
+    
+    xor bp, bp          ; Старшие 16 бит LBA = 0
+    mov si, 1           ; Младшие 16 бит LBA = 1
+
+load_loop:
+    push ecx            ; Сохраняем счетчик цикла
+
+    ; Строим структуру DAP в стеке
+    push word 0         
+    push word 0         
+    push bp             
+    push si             
+    push bx             
+    push word 0x0000    
+    push word 100       ; Читаем мощной порцией по 100 секторов за раз (безопасный максимум!)
+    push word 0x0010    
 
     mov ah, 0x42
-    mov dl, [boot_drive]
-    mov si, sp          
+    mov dl, [boot_drive] 
+    mov di, sp          
+    push si             
+    mov si, di          
     int 0x13
-    jc disk_error
-    add sp, 16          ; Очистили стек
+    pop si              
+    jc disk_error       
+
+    add sp, 16          ; Очищаем стек
+    
+    ; Сдвигаем параметры для следующей порции:
+    add si, 100         ; Продвигаем LBA адрес вперед на 100 секторов
+    adc bp, 0           
+    add bx, 0x0C80      ; Сдвигаем сегмент ОЗУ вперед на 100 секторов (51200 байт / 16 = 0x0C80)
+
+    pop ecx             
+    loop load_loop      
+
 
     ; Переход в 32-битный защищенный режим
     cli

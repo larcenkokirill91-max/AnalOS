@@ -11,3 +11,5 @@ int last_s = -1;
 int last_m = -1;
 int last_h = -1;
 int start_menu_open = 0;
+int dragged_window_idx = -1;
+int is_mouse_pressed = 0;
