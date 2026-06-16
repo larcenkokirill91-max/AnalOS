@@ -3,60 +3,85 @@
 # ==============================================================================
 TFTP_DIR = /srv/tftp
 
-all: run
+CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mpreferred-stack-boundary=2 -fno-tree-vectorize -Ikernel/include -Ilibc/include
 
-boot.bin: boot/bootloader.asm
-	nasm -f bin boot/bootloader.asm -o boot.bin
+all: AnalOS.img run
 
-kernel.o: src/kernel/kernel.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c src/kernel/kernel.c -o kernel.o
+build/boot.bin: boot/bootloader.asm
+	nasm -f bin boot/bootloader.asm -o build/boot.bin
 
-screen.o: drivers/screen/screen.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c drivers/screen/screen.c -o screen.o
+build/boot_qemu.bin: boot/boot.asm
+	nasm -f bin boot/boot.asm -o build/boot_qemu.bin
 
-keyboard.o: drivers/keyboard/keyboard.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c drivers/keyboard/keyboard.c -o keyboard.o
+build/kernel.o: kernel/kernel.c
+	gcc $(CFLAGS) -c kernel/kernel.c -o build/kernel.o
 
-disk.o: drivers/disk/disk.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c drivers/disk/disk.c -o disk.o
+build/screen.o: kernel/drivers/screen/screen.c
+	gcc $(CFLAGS) -c kernel/drivers/screen/screen.c -o build/screen.o
 
-window.o: src/kernel/window.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c src/kernel/window.c -o window.o
+build/font.o: kernel/drivers/screen/font.c
+	gcc $(CFLAGS) -c kernel/drivers/screen/font.c -o build/font.o
 
-idt.o: src/kernel/idt.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-sse -mno-mmx -mno-80387 -c src/kernel/idt.c -o idt.o
+build/window.o: kernel/drivers/screen/window.c
+	gcc $(CFLAGS) -c kernel/drivers/screen/window.c -o build/window.o
 
-time.o: src/kernel/time.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c src/kernel/time.c -o time.o
+build/start_menu.o: kernel/drivers/screen/start_menu.c
+	gcc $(CFLAGS) -c kernel/drivers/screen/start_menu.c -o build/start_menu.o
 
-font.o: drivers/screen/font.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c drivers/screen/font.c -o font.o
+build/keyboard.o: kernel/drivers/keyboard/keyboard.c
+	gcc $(CFLAGS) -c kernel/drivers/keyboard/keyboard.c -o build/keyboard.o
 
-math.o: src/math.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c src/math.c -o math.o
+build/idt.o: kernel/drivers/keyboard/idt.c
+	gcc $(CFLAGS) -mno-sse -mno-mmx -mno-80387 -c kernel/drivers/keyboard/idt.c -o build/idt.o
 
-start_menu.o: src/start_menu.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c src/start_menu.c -o start_menu.o
+build/disk.o: kernel/drivers/disk/disk.c
+	gcc $(CFLAGS) -c kernel/drivers/disk/disk.c -o build/disk.o
 
-lib.o: lib/lib.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c lib/lib.c -o lib.o
+build/fs.o: kernel/drivers/disk/fs.c
+	gcc $(CFLAGS) -c kernel/drivers/disk/fs.c -o build/fs.o
 
-fs.o: src/fs/fs.c
-	gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -c src/fs/fs.c -o fs.o
+build/lib.o: libc/lib.c
+	gcc $(CFLAGS) -c libc/lib.c -o build/lib.o
 
-kernel.bin: kernel.o screen.o keyboard.o disk.o window.o idt.o time.o font.o math.o start_menu.o lib.o fs.o linker.ld
-	ld -m elf_i386 --oformat binary -T linker.ld -o kernel.bin kernel.o screen.o keyboard.o disk.o window.o idt.o time.o font.o math.o start_menu.o lib.o fs.o
+build/math.o: libc/math.c
+	gcc $(CFLAGS) -c libc/math.c -o build/math.o
 
-os-image.img: boot.bin kernel.bin
-	cat boot.bin kernel.bin > os-image.img
-	python3 mkfs.py
-	truncate -s 1474560 os-image.img
+build/time.o: libc/time.c
+	gcc $(CFLAGS) -c libc/time.c -o build/time.o
 
+OBJ = build/kernel.o build/screen.o build/font.o build/window.o build/start_menu.o \
+      build/keyboard.o build/idt.o build/disk.o build/fs.o \
+      build/lib.o build/math.o build/time.o
+
+build/kernel.bin: $(OBJ) boot/linker.ld
+	ld -m elf_i386 --oformat binary -T boot/linker.ld -o build/kernel.bin $(OBJ)
+os-image.img: build/boot.bin build/kernel.bin
+	cat build/boot.bin build/kernel.bin > AnalOS.img
+# python3 mkfs.py
+	truncate -s 1474560 AnalOS.img
+
+os-qemu.img: boot_qemu.bin kernel.bin
+	cat build/boot_qemu.bin build/kernel.bin > AnalOS-qemu.img
+	truncate -s 10485760 AnalOS-qemu.img
 
 # ==============================================================================
 # АВТОМАТИЧЕСКИЙ ДЕПЛОЙ В СЕТЕВУЮ ПАПКУ
 # ==============================================================================
-run: os-image.img
+
+qemu: os-qemu.img
+	qemu-system-i386 \
+		-machine type=pc,accel=tcg \
+		-cpu pentium3 \
+		-vga std \
+		-display sdl \
+		-m 512M \
+		-drive file=os-qemu.img,format=raw,media=disk,index=0 \
+		-k ru \
+		-boot c \
+		-d int,cpu_reset -D qemu.log
+
+
+run: AnalOS.img
 #	 1. Сносим старый образ из сети, чтобы роутер его не кэшировал
 #	rm -f $(TFTP_DIR)/os-image.img
 #	 2. Копируем свежую сборку образа и ЧИСТОГО ядра для флешки!
@@ -65,4 +90,4 @@ run: os-image.img
 #	-sudo systemctl restart dnsmasq
 
 clean:
-	rm -f *.bin *.o *.img qemu.log
+	rm -rf build/*.o build/*.bin
