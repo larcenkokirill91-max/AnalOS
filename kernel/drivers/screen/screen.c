@@ -130,7 +130,10 @@ void draw_off(unsigned char* video_memory, int start_x, int start_y) {
     draw_rect(video_memory, start_x, start_y, 10, 40, 0, 120, 212, 255);
 }
 
-void draw_off_menu(unsigned char* video_memory) {
-    draw_restart(video_memory, 550, 500);
-    draw_off(video_memory, 800, 500);
+void draw_off_menu(unsigned char* back_buffer, int win_x, int win_y) {
+    int restart_x = win_x + 100;
+    int off_x = win_x + 350;
+    int icons_y = win_y + 100;
+    draw_restart(back_buffer, restart_x, icons_y);
+    draw_off(back_buffer, off_x, icons_y);
 }
