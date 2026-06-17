@@ -1,11 +1,8 @@
-# ==============================================================================
-# НАСТРОЙКИ СЕТЕВОЙ РАЗРАБОТКИ (PXE / LAN)
-# ==============================================================================
 TFTP_DIR = /srv/tftp
 
 CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mpreferred-stack-boundary=2 -fno-tree-vectorize -Ikernel/include -Ilibc/include
 
-all: AnalOS.img run
+all: AnalOS.img
 
 build/boot.bin: boot/bootloader.asm
 	nasm -f bin boot/bootloader.asm -o build/boot.bin
@@ -55,18 +52,14 @@ OBJ = build/kernel.o build/screen.o build/font.o build/window.o build/start_menu
 
 build/kernel.bin: $(OBJ) boot/linker.ld
 	ld -m elf_i386 --oformat binary -T boot/linker.ld -o build/kernel.bin $(OBJ)
-os-image.img: build/boot.bin build/kernel.bin
+
+AnalOS.img: build/boot.bin build/kernel.bin
 	cat build/boot.bin build/kernel.bin > AnalOS.img
-# python3 mkfs.py
 	truncate -s 1474560 AnalOS.img
 
-os-qemu.img: boot_qemu.bin kernel.bin
+os-qemu.img: build/boot_qemu.bin build/kernel.bin
 	cat build/boot_qemu.bin build/kernel.bin > AnalOS-qemu.img
 	truncate -s 10485760 AnalOS-qemu.img
-
-# ==============================================================================
-# АВТОМАТИЧЕСКИЙ ДЕПЛОЙ В СЕТЕВУЮ ПАПКУ
-# ==============================================================================
 
 qemu: os-qemu.img
 	qemu-system-i386 \
@@ -75,19 +68,10 @@ qemu: os-qemu.img
 		-vga std \
 		-display sdl \
 		-m 512M \
-		-drive file=os-qemu.img,format=raw,media=disk,index=0 \
+		-drive file=AnalOS-qemu.img,format=raw,media=disk,index=0 \
 		-k ru \
 		-boot c \
 		-d int,cpu_reset -D qemu.log
 
-
-run: AnalOS.img
-#	 1. Сносим старый образ из сети, чтобы роутер его не кэшировал
-#	rm -f $(TFTP_DIR)/os-image.img
-#	 2. Копируем свежую сборку образа и ЧИСТОГО ядра для флешки!
-#	cp os-image.img $(TFTP_DIR)/os-image.img
-#	 3. Перезапускаем dnsmasq, чтобы обновить сетевую сессию
-#	-sudo systemctl restart dnsmasq
-
 clean:
-	rm -rf build/*.o build/*.bin
+	rm -rf build/*.o build/*.bin AnalOS.img AnalOS-qemu.img
