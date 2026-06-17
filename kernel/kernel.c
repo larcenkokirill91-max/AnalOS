@@ -220,6 +220,12 @@ void kernel_main(void) {
                                     draw_window((unsigned char*)back_buffer32, &win[i]);
                                 }
                             }
+                            if (menu_open == 1) {
+                                draw_off_menu((unsigned char*)back_buffer32, win[0].lt.x, win[0].lt.y);
+                                int current_line_x = (selected_option == 1) ? (win[0].lt.x + 300) : (win[0].lt.x + 50);
+                                int current_line_y = win[0].lt.y + 165;
+                                draw_rect((unsigned char*)back_buffer32, current_line_x, current_line_y, 100, 4, 0, 120, 212, 255);
+                            }
                             swap_buffers();
                             is_dragging = 0;
                         }
@@ -246,9 +252,11 @@ void kernel_main(void) {
                 menu_open = 1;
                 selected_option = 0;
                 win[0].is_visible = 1;
+                int start_line_y = win[0].lt.y + 165;
+                int start_left_x = win[0].lt.x + 50;
                 draw_window((unsigned char*)back_buffer32, &win[0]);
-                draw_off_menu((unsigned char*)back_buffer32);
-                draw_rect((unsigned char*)back_buffer32, 500, 565, 100, 4, 0, 120, 212, 255);
+                draw_off_menu((unsigned char*)back_buffer32, win[0].lt.x, win[0].lt.y);
+                draw_rect((unsigned char*)back_buffer32, start_left_x, start_line_y, 100, 4, 0, 120, 212, 255);
                 swap_buffers();
                 draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
             }
@@ -257,7 +265,7 @@ void kernel_main(void) {
                 int left_line_x = win[0].lt.x + 50;
                 int right_line_x = win[0].lt.x + 300;
 
-                if (data == 28) { // Клавиша Enter
+                if (data == 28) {
                     if (selected_option == 1) {
                         sys_shutdown();
                     } else {
@@ -267,6 +275,7 @@ void kernel_main(void) {
                 } 
                 else if (data == 1) {
                     menu_open = 0;
+                    win[0].is_visible = 0;
                     render((unsigned char*)back_buffer32, fs);
                     for (int i = 0; i < 3; i++) {
                         if (win[i].is_visible) {

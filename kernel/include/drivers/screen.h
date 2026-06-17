@@ -11,6 +11,6 @@ void swap_buffers(void);
 void draw_time(unsigned char* back_buffer, unsigned char* video_memory);
 void draw_restart(unsigned char* video_memory, int start_x, int start_y);
 void draw_off(unsigned char* video_memory, int start_x, int start_y);
-void draw_off_menu(unsigned char* video_memory);
+void draw_off_menu(unsigned char* back_buffer, int win_x, int win_y);
 
 #endif
