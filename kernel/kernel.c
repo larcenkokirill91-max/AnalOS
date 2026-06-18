@@ -126,7 +126,8 @@ static inline void flip_buffers(void* dest, const void* src, int dwords) {
 }
 __attribute__((section(".text.entry")))
 void kernel_main(void) {
-    unsigned int* video_memory32 = (unsigned int*)0xD0000000;
+    unsigned int* video_memory32;
+    __asm__ __volatile__("mov %%ebx, %0" : "=r"(video_memory32));
     struct superblock* fs = (struct superblock*)0x15800;
     unsigned int* window_bg_buffer = (unsigned int*)0x01000000;
     unsigned int* mouse_bg_buffer_local = (unsigned int*)0x01100000;

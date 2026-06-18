@@ -2,6 +2,7 @@
 [bits 16]
 
 KERNEL_OFFSET equ 0x10000
+VBE_INFO_ADDR equ 0x9000      ; Новое безопасное место для структуры VBE (не конфликтует со стеком)
 
 start:
     xor ax, ax
@@ -14,8 +15,8 @@ start:
 
     ; 1. Настройка графики VBE 1280x1024, 32 bit
     mov ax, 0x4F01
-    mov cx, 0x411B
-    mov di, 0x7000      
+    mov cx, 0x411B            ; 0x4000 (LFB) + 0x11B (режим)
+    mov di, VBE_INFO_ADDR     ; Заполняем структуру по адресу 0x9000
     int 0x10
     cmp ax, 0x004F
     jne video_error
@@ -36,15 +37,15 @@ start:
     mov dl, [boot_drive]
     int 0x13
 
-    ; === ЧТЕНИЕ ЯДРА НА ГОДЫ ВПЕРЕД (Читаем 1000 секторов = ~500 КБ) ===
-    mov cx, 10          ; 10 порций * 100 секторов = 1000 секторов ТОТАЛ!
-    mov bx, 0x1000      ; Стартовый сегмент памяти (0x1000)
+    ; === ЧТЕНИЕ ЯДРА ===
+    mov cx, 10          
+    mov bx, 0x1000      
     
-    xor bp, bp          ; Старшие 16 бит LBA = 0
-    mov si, 1           ; Младшие 16 бит LBA = 1
+    xor bp, bp          
+    mov si, 1           
 
 load_loop:
-    push ecx            ; Сохраняем счетчик цикла
+    push ecx            
 
     ; Строим структуру DAP в стеке
     push word 0         
@@ -53,7 +54,7 @@ load_loop:
     push si             
     push bx             
     push word 0x0000    
-    push word 100       ; Читаем мощной порцией по 100 секторов за раз (безопасный максимум!)
+    push word 100       
     push word 0x0010    
 
     mov ah, 0x42
@@ -65,16 +66,14 @@ load_loop:
     pop si              
     jc disk_error       
 
-    add sp, 16          ; Очищаем стек
+    add sp, 16          
     
-    ; Сдвигаем параметры для следующей порции:
-    add si, 100         ; Продвигаем LBA адрес вперед на 100 секторов
+    add si, 100         
     adc bp, 0           
-    add bx, 0x0C80      ; Сдвигаем сегмент ОЗУ вперед на 100 секторов (51200 байт / 16 = 0x0C80)
+    add bx, 0x0C80      
 
     pop ecx             
     loop load_loop      
-
 
     ; Переход в 32-битный защищенный режим
     cli
@@ -110,6 +109,11 @@ init_pm:
     mov ebp, 0x90000
     mov esp, ebp
 
+    ; === ДОСТАЕМ АДРЕС ВИДЕОПАМЯТИ ИЗ СТРУКТУРЫ VBE ===
+    ; В структуре VBE Mode Info по смещению 40 (0x28) лежит 32-битный указатель на Linear Framebuffer
+    mov ebx, [VBE_INFO_ADDR + 0x28] 
+
+    ; Теперь в EBX находится динамический адрес видеопамяти текущего ПК!
     call KERNEL_OFFSET    
     jmp $
 
