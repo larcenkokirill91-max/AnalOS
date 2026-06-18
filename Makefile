@@ -7,6 +7,9 @@ all: AnalOS.img
 build/boot.bin: boot/bootloader.asm
 	nasm -f bin boot/bootloader.asm -o build/boot.bin
 
+build/kernel_entry.o: boot/kernel_entry.asm
+	nasm -f elf32 boot/kernel_entry.asm -o build/kernel_entry.o
+
 build/boot_qemu.bin: boot/boot.asm
 	nasm -f bin boot/boot.asm -o build/boot_qemu.bin
 
