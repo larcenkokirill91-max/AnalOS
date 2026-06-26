@@ -1,4 +1,5 @@
 [bits 32]
+section .text.entry
 [extern kernel_main]
 global _start
 _start:

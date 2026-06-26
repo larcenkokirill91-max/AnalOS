@@ -33,9 +33,14 @@ start:
     or al, 2
     out 0x92, al
 
-    lgdt [gdt_descriptor]
+  mov cx, [0x9000 + 0x10]   ; Запоминаем Pitch в байтах, пока мы в 16-битном режиме!
+  lgdt [gdt_descriptor]
+  mov eax, cr0
+  or eax, 0x1
+  mov cr0, eax
 
-    mov eax, cr0
+  jmp CODE_SEG:init_pm
+
     or eax, 0x1
     mov cr0, eax
 
@@ -58,15 +63,18 @@ init_pm:
 
     ; Чтение ядра напрямую через порты диска ATA PIO
     mov edi, KERNEL_OFFSET
-    mov ebx, 1          
-    mov ecx, 1000       
+    mov ebx, 1          ; Стартовый сектор LBA (0 - загрузчик, 1 - начало ядра)
+    mov ecx, 1000       ; Сколько секторов читать (согласуется с размером в Makefile)
 
 .read_loop:
     push ecx
+    
+    ; 1. Выдаем количество секторов (1 сектор за итерацию)
     mov dx, 0x1F2
     mov al, 1
     out dx, al
 
+    ; 2. Передаем LBA адрес (28-bit) в порты
     mov eax, ebx
     mov dx, 0x1F3
     out dx, al          
@@ -83,30 +91,39 @@ init_pm:
 
     mov eax, ebx
     shr eax, 24
-    or al, 0xE0         
+    or al, 0xE0         ; Режим LBA + Master Drive
     mov dx, 0x1F6
     out dx, al
 
+    ; 3. Команда "Чтение секторов с повтором" (Read Sectors With Retry)
     mov dx, 0x1F7
     mov al, 0x20
     out dx, al
 
+; 4. Ожидаем готовности контроллера диска
 .wait_disk:
     in al, dx
-    test al, 0x80       
+    test al, 0x80       ; Статус BSY (Busy) должен быть 0
     jnz .wait_disk
-    test al, 0x08       
+    test al, 0x08       ; Статус DRQ (Data Request) должен быть 1
     jz .wait_disk
 
+    ; 5. Читаем сектор (256 слов по 2 байта = 512 байт)
     mov ecx, 256
     mov dx, 0x1F0
-    rep insw            
+    rep insw            ; Читает из порта DX в память [EDI], И САМА ДВИГАЕТ EDI ВПЕРЁД!
 
-    inc ebx             
+    inc ebx             ; Переходим к следующему LBA сектору
     pop ecx
     loop .read_loop     
 
-    jmp KERNEL_OFFSET   
+    ; Достаем адрес видеопамяти для ядра из структуры VBE (как в основном загрузчике)
+    ; Достаем адрес видеопамяти для ядра из структуры VBE
+    mov ebx, [0x9000 + 0x28] 
+    ; НОВОЕ: Достаем Pitch (BytesPerScanLine) — это 16-битное число по смещению 0x10
+    movzx ecx, word [0x9000 + 0x10]
+    ; Прыгаем на физический адрес ядра
+    jmp CODE_SEG:KERNEL_OFFSET    
     jmp $
 
 align 4

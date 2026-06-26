@@ -1,71 +1,47 @@
-#define SCREEN_WIDTH  1280
+#define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 1024
 #define WIN_HH 25
-#define WIN_WW 5
 
 #include <kernel.h>
+#include <stdint.h>
 
-unsigned int* back_buffer32 = (unsigned int*)0x04000000; 
-unsigned int mouse_bg_buffer[256];
-int alt_pressed = 0;
+// 1. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ЯДРА
+unsigned int screen_pitch = 5120;
+int pitch_dw = 1280;
+int global_pitch_dw = 1280;
+unsigned int* global_video_memory = (unsigned int*)0xD0000000;
+
+unsigned int* back_buffer32 = 0; 
+
+int mouse_x = 0;
+int mouse_y = 0;
+int dragged_window_idx = -1;
 int menu_open = 0;
-int mouse_x = 640;
-int mouse_y = 512;
-int mouse_cycle = 0;
-signed char mouse_packet[3];
-unsigned char data = 0;
-int h = 0, m = 0, s = 0;
+int start_menu_open = 0;
+int alt_pressed = 0;
+int y = 0, mth = 0, d = 0, h = 0, m = 0, s = 0;
 int last_s = -1;
 int last_m = -1;
 int last_h = -1;
-int start_menu_open = 0;
-int dragged_window_idx = -1;
-int is_mouse_pressed = 0;
-unsigned char current_scancode;
-unsigned int screen_pitch = 5120;
-int pitch_dw = 1280; 
-static inline void outl(unsigned short port, unsigned int val) {
-    __asm__ __volatile__("outl %0, %1" : : "a"(val), "Nd"(port));
+int last_d = -1;
+int last_mth = -1;
+int last_y = -1;
+
+void mouse_init();
+void idt_init();
+void draw_window(unsigned char* video_memory, struct window* win);
+void swap_buffers();
+void draw_cursor(unsigned char* video_memory, int start_x, int start_y);
+void draw_xor_frame(unsigned int* video_memory, int x, int y, int w, int h, int pitch);
+void draw_char(unsigned char* video_memory, int char_code, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b);
+
+void render(unsigned char* video_memory, struct superblock* fs) {
+    if (!video_memory) return;
+    draw_rect(video_memory, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 255, 255);
+    draw_rect((unsigned char*)back_buffer32, 0, 966, 1280, 58, 238, 238, 238, 255);
 }
-static inline unsigned int inl(unsigned short port) {
-    unsigned int ret;
-    __asm__ __volatile__("inl %1, %0" : "=a"(ret) : "Nd"(port));
-    return ret;
-}
-void (*draw_digit[10])(unsigned char*, int, int, unsigned char, unsigned char, unsigned char) = {
-    draw_zero, draw_one, draw_two, draw_three, draw_four,
-    draw_five, draw_six, draw_seven, draw_eight, draw_nine
-};
-void draw_time(unsigned char* back_buffer, unsigned char* video_memory) {
-    get_rtc_time(&h, &m, &s);
-    if (m != last_m || h != last_h) {
-        last_m = m;
-        last_h = h;
-        int fh = floor_div(h, 10);
-        int lh = tenth_digit(h, 10);
-        int fm = floor_div(m, 10);
-        int lm = tenth_digit(m, 10);
-        draw_rect(back_buffer, 1180, 1000, 20, 20, 229, 236, 253, 255);
-        draw_digit[fh](back_buffer, 1180, 1000, 0, 0, 0);
-        draw_rect(back_buffer, 1196, 1000, 20, 20, 229, 236, 253, 255);
-        draw_digit[lh](back_buffer, 1196, 1000, 0, 0, 0);
-        draw_rect(back_buffer, 1212, 1002, 4, 4, 0, 0, 0, 255);
-        draw_rect(back_buffer, 1212, 1012, 4, 4, 0, 0, 0, 255);
-        draw_rect(back_buffer, 1216, 1000, 20, 20, 229, 236, 253, 255);
-        draw_digit[fm](back_buffer, 1216, 1000, 0, 0, 0);
-        draw_rect(back_buffer, 1232, 1000, 20, 20, 229, 236, 253, 255);
-        draw_digit[lm](back_buffer, 1232, 1000, 0, 0, 0);
-        unsigned int* src32 = (unsigned int*)back_buffer;
-        unsigned int* dst32 = (unsigned int*)video_memory;
-        for (int y = 1000; y < 1020; y++) {
-            int row_offset = y * pitch_dw;
-            for (int x = 1180; x < 1252; x++) {
-                dst32[row_offset + x] = src32[row_offset + x];
-            }
-        }
-    }
-}
-void sys_shutdown(void) {
+
+void sys_shutdown() {
     outl(0xCF8, 0x8000F840);
     io_wait();
     unsigned int pmbase = inl(0xCFC) & 0xFFFE;
@@ -83,190 +59,333 @@ void sys_shutdown(void) {
     io_wait();
     __asm__ __volatile__("cli; hlt");
 }
-void render(unsigned char* video_memory, struct superblock* fs) {
-    draw_rect(video_memory, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 69, 178, 253, 255);
-    draw_rect(video_memory, 0, 990, SCREEN_WIDTH, 40, 229, 236, 253, 255);
-    draw_start(video_memory, 650, 992, 0, 120, 212);
-    if (fs->magic == 0x15800) {
-        draw_os(video_memory, 640, 512, 0, 0, 0);
-    } else {
-        draw_os(video_memory, 640, 512, 255, 0, 0);
+
+void draw_time(unsigned char* back_buffer, unsigned char* video_memory) { 
+    get_rtc_time(&y, &mth, &d, &h, &m, &s);
+    
+    if (m != last_m || h != last_h || d != last_d || mth != last_mth || y != last_y) { 
+        last_m = m; last_h = h; last_d = d; last_mth = mth; last_y = y;
+        
+        int fh = floor_div(h, 10); 
+        int lh = tenth_digit(h, 10); 
+        int fm = floor_div(m, 10); 
+        int lm = tenth_digit(m, 10); 
+
+        int fd = floor_div(d, 10);
+        int ld = tenth_digit(d, 10);
+        int fmth = floor_div(mth, 10);
+        int lmth = tenth_digit(mth, 10);
+        
+        int current_y = 2000 + y; 
+        int y1 = current_y / 1000;
+        int y2 = (current_y / 100) % 10;
+        int y3 = (current_y / 10) % 10;
+        int y4 = current_y % 10;
+
+        draw_rect(back_buffer, 1100, 966, 152, 58, 238, 238, 238, 255); 
+
+        // СТРОКА 1: ВРЕМЯ (Y 979)
+        int time_x = 1150; 
+
+        draw_char(back_buffer, fh + 16, time_x,      979, 0, 0, 0); 
+        draw_char(back_buffer, lh + 16, time_x + 8,  979, 0, 0, 0); 
+        draw_char(back_buffer, 26,      time_x + 14, 979, 0, 0, 0); // Двоеточие
+        draw_char(back_buffer, fm + 16, time_x + 20, 979, 0, 0, 0); 
+        draw_char(back_buffer, lm + 16, time_x + 28, 979, 0, 0, 0); 
+
+        // СТРОКА 2: ДАТА (Y 1001)
+        int date_x = 1130; 
+
+        draw_char(back_buffer, fd + 16,   date_x,      1001, 0, 0, 0); 
+        draw_char(back_buffer, ld + 16,   date_x + 8,  1001, 0, 0, 0); 
+        draw_char(back_buffer, 14,        date_x + 16, 1001, 0, 0, 0); // Точка
+        
+        draw_char(back_buffer, fmth + 16, date_x + 24, 1001, 0, 0, 0); 
+        draw_char(back_buffer, lmth + 16, date_x + 32, 1001, 0, 0, 0); 
+        draw_char(back_buffer, 14,        date_x + 40, 1001, 0, 0, 0); // Точка
+        
+        draw_char(back_buffer, y1 + 16,   date_x + 48, 1001, 0, 0, 0); 
+        draw_char(back_buffer, y2 + 16,   date_x + 56, 1001, 0, 0, 0); 
+        draw_char(back_buffer, y3 + 16,   date_x + 64, 1001, 0, 0, 0); 
+        draw_char(back_buffer, y4 + 16,   date_x + 72, 1001, 0, 0, 0); 
+
+        unsigned int* src32 = (unsigned int*)back_buffer; 
+        unsigned int* dst32 = (unsigned int*)video_memory; 
+        for (int y_coord = 966; y_coord < 1024; y_coord++) { 
+            int row_offset = y_coord * pitch_dw; 
+            for (int x_coord = 1100; x_coord < 1252; x_coord++) { 
+                dst32[row_offset + x_coord] = src32[row_offset + x_coord];
+            } 
+        }
     }
 }
-static inline unsigned long long rdmsr(unsigned int msr) {
-    unsigned int low, high;
-    __asm__ __volatile__("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));
-    return ((unsigned long long)high << 32) | low;
-}
-static inline void wrmsr(unsigned int msr, unsigned long long val) {
-    unsigned int low = (unsigned int)val;
-    unsigned int high = (unsigned int)(val >> 32);
-    __asm__ __volatile__("wrmsr" : : "c"(msr), "a"(low), "d"(high));
-}
-void enable_write_combining(unsigned int vram_base) {
-    unsigned long long base_val = (vram_base & 0xFFFFF000) | 0x01;
-    unsigned long long mask_val = 0xF000000000000000ULL | 0x00000000FF800000ULL | 0x800;
 
-    __asm__ __volatile__("cli");
-    wrmsr(0x200, base_val);
-    wrmsr(0x201, mask_val);
+#define HEAP_START 0x04000000  
+#define HEAP_SIZE  0x04000000  
 
-    unsigned long long def_type = rdmsr(0x2FF);
-    wrmsr(0x2FF, def_type | 0x400);
-    __asm__ __volatile__("sti");
+struct memory_block {
+    unsigned int size;       
+    unsigned char is_free;   
+    struct memory_block* next; 
+};
+
+static struct memory_block* free_list = (struct memory_block*)HEAP_START;
+
+__attribute__((section(".text.entry")))
+void heap_init() {
+    free_list->size = HEAP_SIZE - sizeof(struct memory_block);
+    free_list->is_free = 1;
+    free_list->next = 0; 
 }
-static inline void flip_buffers(void* dest, const void* src, int dwords) {
-    __asm__ __volatile__ (
-        "cld\n\t"
-        "rep movsd"
-        : "+D"(dest), "+S"(src), "+c"(dwords)
-        :
-        : "memory"
-    );
+
+__attribute__((section(".text.entry")))
+void* malloc(unsigned int size) {
+    if (size == 0) return 0;
+    size = (size + 3) & ~3;
+
+    struct memory_block* curr = free_list;
+    while (curr) {
+        if (curr->is_free && curr->size >= size) {
+            if (curr->size >= size + sizeof(struct memory_block) + 4) {
+                struct memory_block* next_block = (struct memory_block*)((unsigned char*)curr + sizeof(struct memory_block) + size);
+                next_block->size = curr->size - size - sizeof(struct memory_block);
+                next_block->is_free = 1;
+                next_block->next = curr->next;
+                curr->size = size;
+                curr->next = next_block;
+            }
+            curr->is_free = 0;
+            return (void*)((unsigned char*)curr + sizeof(struct memory_block));
+        }
+        curr = curr->next;
+    }
+    return 0; 
 }
+
+static void play_sound(uint32_t nFrequence) {
+    if (nFrequence == 0) return;
+    
+    uint32_t Div = 1193180 / nFrequence;
+    
+    outb(0x43, 0xB6);
+    
+    outb(0x42, (uint8_t)(Div & 0xFF));
+    outb(0x42, (uint8_t)((Div >> 8) & 0xFF));
+    
+    uint8_t tmp = inb(0x61);
+    if (tmp != (tmp | 3)) {
+        outb(0x61, tmp | 3);
+    }
+}
+
+ static void nosound() {
+ 	uint8_t tmp = inb(0x61) & 0xFC;
+     
+ 	outb(0x61, tmp);
+ }
+ 
+static void play_sound(uint32_t nFrequence);
+void timer_wait(int ticks);
+
+ void beep() {
+ 	 play_sound(500);
+ 	 timer_wait(10);
+ 	 nosound();
+ }
+
+__attribute__((section(".text.entry")))
+void free(void* ptr) {
+    if (!ptr) return;
+    struct memory_block* block = (struct memory_block*)((unsigned char*)ptr - sizeof(struct memory_block));
+    block->is_free = 1;
+
+    struct memory_block* core_block = free_list;
+    while (core_block) {
+        if (core_block->is_free && core_block->next && core_block->next->is_free) {
+            core_block->size += sizeof(struct memory_block) + core_block->next->size;
+            core_block->next = core_block->next->next;
+            continue; 
+        }
+        core_block = core_block->next;
+    }
+}
+
 __attribute__((section(".text.entry")))
 void kernel_main(void) {
-    unsigned int* video_memory32;
-    __asm__ __volatile__("mov %%ebx, %0" : "=r"(video_memory32));
+    unsigned int* vbe_info_struct = (unsigned int*)0x9000;
+    unsigned int* real_lfb = (unsigned int*)(vbe_info_struct[0x28 / 4]); 
+
+    if (real_lfb != 0) {
+        global_video_memory = real_lfb;
+    } else {
+        global_video_memory = (unsigned int*)0xD0000000;
+    }
+
+    unsigned int* video_memory32 = global_video_memory;
+
     struct superblock* fs = (struct superblock*)0x15800;
     unsigned int* window_bg_buffer = (unsigned int*)0x01000000;
-    unsigned int* mouse_bg_buffer_local = (unsigned int*)0x01100000;
-    int win_bg_saved = 0;
-    int pitch_dw = screen_pitch / 4;
+    
+    back_buffer32 = (unsigned int*)malloc(1280 * 1024 * sizeof(unsigned int));
+    if (back_buffer32 == 0) {
+        back_buffer32 = (unsigned int*)0x05000000; 
+    }
+
     unsigned int time_counter = 0;
     int old_win_x = 0;
     int old_win_y = 0;
     int is_dragging = 0;
     int frame_x = 0;
     int frame_y = 0;
-    struct window win[3];
-    win[0].lt.x = 450;  win[0].lt.y = 400;
-    win[0].width = 450; win[0].height = 200;
-    win[0].is_visible = 0;
-    win[1].lt.x = 450;  win[1].lt.y = 300;
-    win[1].width = 400; win[1].height = 250;
-    win[1].is_visible = 0;
-    win[2].lt.x = 900;  win[2].lt.y = 600;
-    win[2].width = 300; win[2].height = 150;
-    win[2].is_visible = 0;
+    
     unsigned char selected_option = 0;
     static unsigned char prev_left_button = 0;
+    static unsigned int last_printed_tick = 0;
+
     mouse_init();
     idt_init();
+    heap_init();
+    cpp_init_windows();
+    
     dragged_window_idx = -1;
     prev_left_button = 0;
     menu_open = 0;
     start_menu_open = 0;
-    render((unsigned char*)back_buffer32, fs); 
+    
+    render((unsigned char*)back_buffer32, fs);
+    
     for (int i = 0; i < 3; i++) {
-        if (win[i].is_visible) draw_window((unsigned char*)back_buffer32, &win[i]);
+        if (cpp_get_window_is_visible(i)) {
+            cpp_draw_single_window((unsigned char*)back_buffer32, i);
+        }
     }
+
     swap_buffers();
     draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
+    beep();
     while(1) {
-        unsigned char status = inb(0x64);
-        if (status & 0x01) {
-            data = inb(0x60);
-            if (status & 0x20) {
-                if (mouse_cycle == 0 && (data & 0x08) == 0) { continue; }
-                mouse_packet[mouse_cycle] = data;
-                mouse_cycle++;
-                if (mouse_cycle == 3) {
-                    mouse_cycle = 0;
-                    if ((mouse_packet[0] & 0x08) == 0) { continue; }
-                    for (int y = 0; y < 16; y++) {
-                        for (int x = 0; x < 16; x++) {
-                            int screen_idx = (mouse_y + y) * pitch_dw + (mouse_x + x);
-                            video_memory32[screen_idx] = back_buffer32[screen_idx]; 
-                        }
+        // --- 1. ОБРАБОТКА МЫШИ ПО СОБЫТИЮ IRQ12 ---
+        int mouse_ready_flag = 0;
+        signed char local_packet[3];
+
+        __asm__ __volatile__("cli");
+        if (mouse_has_data()) {
+            mouse_ready_flag = 1;
+            local_packet[0] = mouse_packet[0];
+            local_packet[1] = mouse_packet[1];
+            local_packet[2] = mouse_packet[2];
+            clear_mouse_flag();
+        }
+        __asm__ __volatile__("sti");
+
+        if (mouse_ready_flag) {
+            for (int y = 0; y < 16; y++) {
+                for (int x = 0; x < 16; x++) {
+                    int screen_idx = (mouse_y + y) * pitch_dw + (mouse_x + x);
+                    if (screen_idx >= 0 && screen_idx < 1280 * 1024) {
+                        video_memory32[screen_idx] = back_buffer32[screen_idx]; 
                     }
-                    signed char move_x = mouse_packet[1];
-                    signed char move_y = mouse_packet[2];
-                    mouse_x += move_x;
-                    mouse_y -= move_y;
-                    if (mouse_x < 0) mouse_x = 0;
-                    if (mouse_y < 0) mouse_y = 0;
-                    if (mouse_x > SCREEN_WIDTH - 16) mouse_x = SCREEN_WIDTH - 16;
-                    if (mouse_y > SCREEN_HEIGHT - 16) mouse_y = SCREEN_HEIGHT - 16;
-                    unsigned char left_button = (mouse_packet[0] & 0x01);
-                    if (left_button == 1) {
-                        if (prev_left_button == 0 && dragged_window_idx == -1 && start_menu_open == 0) {
-                            for (int i = 0; i < 3; i++) {
-                                if (win[i].is_visible && mouse_x >= win[i].lt.x && mouse_x <= (win[i].lt.x + win[i].width) && mouse_y >= win[i].lt.y && mouse_y <= (win[i].lt.y + WIN_HH)) {
-                                    dragged_window_idx = i;
-                                    old_win_x = win[i].lt.x;
-                                    old_win_y = win[i].lt.y;
-                                    is_dragging = 1; 
-                                    frame_x = win[i].lt.x;
-                                    frame_y = win[i].lt.y;
-                                    draw_xor_frame(video_memory32, frame_x, frame_y, win[i].width, win[i].height, pitch_dw);
-                                    break;
-                                }
-                            }
-                        }
-                        if (dragged_window_idx != -1 && (move_x != 0 || move_y != 0)) {
-                            draw_xor_frame(video_memory32, frame_x, frame_y, win[dragged_window_idx].width, win[dragged_window_idx].height, pitch_dw);
-                            win[dragged_window_idx].lt.x += move_x;
-                            win[dragged_window_idx].lt.y -= move_y;
-                            frame_x = win[dragged_window_idx].lt.x;
-                            frame_y = win[dragged_window_idx].lt.y;
-                            draw_xor_frame(video_memory32, frame_x, frame_y, win[dragged_window_idx].width, win[dragged_window_idx].height, pitch_dw);
-                        }
-                    } else {
-                        if (dragged_window_idx != -1 && is_dragging == 1) {
-                            draw_xor_frame(video_memory32, frame_x, frame_y, win[dragged_window_idx].width, win[dragged_window_idx].height, pitch_dw);
-                            render((unsigned char*)back_buffer32, fs);
-                            for (int i = 0; i < 3; i++) {
-                                if (win[i].is_visible) {
-                                    draw_window((unsigned char*)back_buffer32, &win[i]);
-                                }
-                            }
-                            if (menu_open == 1) {
-                                draw_off_menu((unsigned char*)back_buffer32, win[0].lt.x, win[0].lt.y);
-                                int current_line_x = (selected_option == 1) ? (win[0].lt.x + 300) : (win[0].lt.x + 50);
-                                int current_line_y = win[0].lt.y + 165;
-                                draw_rect((unsigned char*)back_buffer32, current_line_x, current_line_y, 100, 4, 0, 120, 212, 255);
-                            }
-                            swap_buffers();
-                            is_dragging = 0;
-                        }
-                        dragged_window_idx = -1;
-                    }
-                    prev_left_button = left_button;
-                    draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
                 }
             }
+
+            signed char move_x = local_packet[1];
+            signed char move_y = local_packet[2];
+            mouse_x += move_x;
+            mouse_y -= move_y;
+
+            if (mouse_x < 0) mouse_x = 0;
+            if (mouse_y < 0) mouse_y = 0;
+            if (mouse_x > SCREEN_WIDTH - 16) mouse_x = SCREEN_WIDTH - 16;
+            if (mouse_y > SCREEN_HEIGHT - 16) mouse_y = SCREEN_HEIGHT - 16;
+
+            unsigned char left_button = (local_packet[0] & 0x01);
+            if (left_button == 1) {
+                if (prev_left_button == 0 && dragged_window_idx == -1 && start_menu_open == 0) {
+                    for (int i = 0; i < 3; i++) {
+                        if (cpp_get_window_is_visible(i) && mouse_x >= cpp_get_window_x(i) && mouse_x <= (cpp_get_window_x(i) + cpp_get_window_width(i)) && mouse_y >= cpp_get_window_y(i) && mouse_y <= (cpp_get_window_y(i) + WIN_HH)) {
+                            dragged_window_idx = i;
+                            old_win_x = cpp_get_window_x(i);
+                            old_win_y = cpp_get_window_y(i);
+                            is_dragging = 1; 
+                            frame_x = cpp_get_window_x(i);
+                            frame_y = cpp_get_window_y(i);
+                            draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(i), cpp_get_window_height(i), pitch_dw);
+                            break;
+                        }
+                    }
+                }
+                if (dragged_window_idx != -1 && (move_x != 0 || move_y != 0)) {
+                    draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(dragged_window_idx), cpp_get_window_height(dragged_window_idx), pitch_dw);
+                    frame_x += move_x;
+                    frame_y -= move_y;
+                    draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(dragged_window_idx), cpp_get_window_height(dragged_window_idx), pitch_dw);
+                }
+            } else {
+                if (dragged_window_idx != -1 && is_dragging == 1) {
+                    draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(dragged_window_idx), cpp_get_window_height(dragged_window_idx), pitch_dw);
+                    cpp_set_window_position(dragged_window_idx, frame_x, frame_y);
+                    render((unsigned char*)back_buffer32, fs);
+                    cpp_draw_windows((unsigned char*)back_buffer32);
+                    if (menu_open == 1) {
+                        int win0_x = cpp_get_window_x(0);
+                        int win0_y = cpp_get_window_y(0);
+                        
+                        draw_off_menu((unsigned char*)back_buffer32, win0_x, win0_y);
+                        int current_line_x = (selected_option == 1) ? (win0_x + 300) : (win0_x + 50);
+                        int current_line_y = win0_y + 165;
+                        draw_rect((unsigned char*)back_buffer32, current_line_x, current_line_y, 100, 4, 0, 120, 212, 255);
+                    }
+                    swap_buffers();
+                    is_dragging = 0;
+                }
+                dragged_window_idx = -1;
+            }
+            prev_left_button = left_button;
+            draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
         }
-        if (current_scancode != 0) {
-            data = current_scancode;
-            current_scancode = 0;
-            if (data == 59) {
-                draw_os((unsigned char*)video_memory32, 640, 512, 0, 0, 255);
-                install_to_disk();
-                draw_os((unsigned char*)video_memory32, 640, 512, 255, 0, 0);
-            } else if (data == 56) {
+
+        // --- 2. ОБРАБОТКА КЛАВИАТУРЫ ПО СОБЫТИЮ IRQ1 ---
+        int kbd_ready_flag = 0;
+        unsigned char kbd_data = 0;
+
+        __asm__ __volatile__("cli");
+        if (keyboard_has_data()) {
+            kbd_ready_flag = 1;
+            kbd_data = current_scancode;
+            clear_keyboard_flag();
+        }
+        __asm__ __volatile__("sti");
+
+        if (kbd_ready_flag) {
+            if (kbd_data == 59) {
+                beep();
+            } else if (kbd_data == 56) {
                 alt_pressed = 1;
-            } else if (data == 184) {
+            } else if (kbd_data == 184) {
                 alt_pressed = 0;
             }
-            if (data == 62 && alt_pressed == 1 && menu_open == 0) {
+
+            if (kbd_data == 62 && alt_pressed == 1 && menu_open == 0) {
                 menu_open = 1;
                 selected_option = 0;
-                win[0].is_visible = 1;
-                int start_line_y = win[0].lt.y + 165;
-                int start_left_x = win[0].lt.x + 50;
-                draw_window((unsigned char*)back_buffer32, &win[0]);
-                draw_off_menu((unsigned char*)back_buffer32, win[0].lt.x, win[0].lt.y);
+                cpp_set_window_visible(0, 1);
+                int start_line_y = cpp_get_window_y(0) + 165;
+                int start_left_x = cpp_get_window_x(0) + 50;
+                
+                cpp_draw_single_window((unsigned char*)back_buffer32, 0);
+                draw_off_menu((unsigned char*)back_buffer32, cpp_get_window_x(0), cpp_get_window_y(0));
                 draw_rect((unsigned char*)back_buffer32, start_left_x, start_line_y, 100, 4, 0, 120, 212, 255);
+                
                 swap_buffers();
                 draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
             }
-            if (menu_open == 1) {
-                int line_y = win[0].lt.y + 165;
-                int left_line_x = win[0].lt.x + 50;
-                int right_line_x = win[0].lt.x + 300;
 
-                if (data == 28) {
+            if (menu_open == 1) {
+                int line_y = cpp_get_window_y(0) + 165;
+                int left_line_x = cpp_get_window_x(0) + 50;
+                int right_line_x = cpp_get_window_x(0) + 300;
+
+                if (kbd_data == 28) {
                     if (selected_option == 1) {
                         sys_shutdown();
                     } else {
@@ -274,26 +393,24 @@ void kernel_main(void) {
                         outb(0x64, 0xFE);
                     }
                 } 
-                else if (data == 1) {
+                else if (kbd_data == 1) {
                     menu_open = 0;
-                    win[0].is_visible = 0;
+                    cpp_set_window_visible(0, 0);
                     render((unsigned char*)back_buffer32, fs);
                     for (int i = 0; i < 3; i++) {
-                        if (win[i].is_visible) {
-                            draw_window((unsigned char*)back_buffer32, &win[i]);
-                        }
+                        if (cpp_get_window_is_visible(i)) cpp_draw_single_window((unsigned char*)back_buffer32, i);
                     }
                     swap_buffers();
                     draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
                 } 
-                else if (data == 77) {
+                else if (kbd_data == 77) {
                     selected_option = 1;
                     draw_rect((unsigned char*)back_buffer32, left_line_x, line_y, 100, 4, 255, 255, 255, 255);
                     draw_rect((unsigned char*)back_buffer32, right_line_x, line_y, 100, 4, 0, 120, 212, 255);
                     swap_buffers();
                     draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
                 } 
-                else if (data == 75) {
+                else if (kbd_data == 75) {
                     selected_option = 0;
                     draw_rect((unsigned char*)back_buffer32, right_line_x, line_y, 100, 4, 255, 255, 255, 255);
                     draw_rect((unsigned char*)back_buffer32, left_line_x, line_y, 100, 4, 0, 120, 212, 255);
@@ -302,14 +419,25 @@ void kernel_main(void) {
                 }
             }
         }
-        time_counter++;
-        if (time_counter >= 4000) {
-            time_counter = 0;
-            draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
-            if (mouse_x >= 1170 && mouse_y >= 990) {
-                draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
-            }
+
+        // --- 3. ОБНОВЛЕНИЕ ВРЕМЕНИ ПО ТАЙМЕРУ PIT (IRQ0) ---
+    __asm__ __volatile__("cli");
+    if (timer_ticks - last_printed_tick >= 18) {
+        last_printed_tick += 18; 
+        __asm__ __volatile__("sti"); 
+
+        draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
+        
+        if (mouse_x >= 1180 && mouse_y >= 990) {
+            draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
         }
-        io_wait();
+        __asm__ __volatile__("cli"); 
+    }
+
+        if (!mouse_has_data() && !keyboard_has_data()) {
+            __asm__ __volatile__("sti\n\thlt"); 
+        } else {
+            __asm__ __volatile__("sti"); 
+        }
     }
 }

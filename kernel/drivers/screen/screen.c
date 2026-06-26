@@ -1,9 +1,38 @@
 #include <kernel.h>
 
 extern unsigned int screen_pitch;
+extern int pitch_dw;
 extern unsigned int* back_buffer32;
+extern unsigned int* global_video_memory;
 
-// Выносим курсор в секцию данных, чтобы полностью разгрузить стек ядра
+void draw_xor_frame(unsigned int* video_memory, int x, int y, int w, int h, int pitch) {
+    if (!video_memory) return;
+
+    for (int i = 0; i < w; i++) {
+        int idx_top = y * pitch + (x + i);
+        int idx_bottom = (y + h - 1) * pitch + (x + i);
+        
+        if (idx_top >= 0 && idx_top < 1280 * 1024) {
+            video_memory[idx_top] ^= 0x00FFFFFF;
+        }
+        if (idx_bottom >= 0 && idx_bottom < 1280 * 1024) {
+            video_memory[idx_bottom] ^= 0x00FFFFFF;
+        }
+    }
+
+    for (int j = 0; j < h; j++) {
+        int idx_left = (y + j) * pitch + x;
+        int idx_right = (y + j) * pitch + (x + w - 1);
+        
+        if (idx_left >= 0 && idx_left < 1280 * 1024) {
+            video_memory[idx_left] ^= 0x00FFFFFF;
+        }
+        if (idx_right >= 0 && idx_right < 1280 * 1024) {
+            video_memory[idx_right] ^= 0x00FFFFFF;
+        }
+    }
+}
+
 static const unsigned char graphics_cursor[16][16] = {
     {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     {2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -19,15 +48,17 @@ static const unsigned char graphics_cursor[16][16] = {
     {2, 1, 1, 1, 1, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0},
     {2, 1, 2, 2, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     {2, 2, 2, 0, 2, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0},
-    {2, 2, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0},
-    {2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+    {2, 2, 0, 0, 2, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0},
+    {2, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0}
 };
 
 void draw_rect(unsigned char* video_memory, int start_x, int start_y, int width, int height, unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
     if (a == 0) return; 
     for (int y = start_y; y < start_y + height; y++) {
         for (int x = start_x; x < start_x + width; x++) {
+            
             int offset = (y * screen_pitch) + (x * 4);
+            
             if (a == 255) {
                 video_memory[offset]     = b;
                 video_memory[offset + 1] = g;
@@ -75,9 +106,7 @@ void draw_cursor(unsigned char* video_memory, int start_x, int start_y) {
 }
 
 void undraw_cursor(unsigned char* video_memory, int start_x, int start_y) {
-    extern unsigned int* back_buffer32; 
     unsigned int* dst32 = (unsigned int*)video_memory;
-    extern int pitch_dw;
 
     for (int y = 0; y < 16; y++) {
         for (int x = 0; x < 16; x++) {
@@ -92,7 +121,6 @@ void undraw_cursor(unsigned char* video_memory, int start_x, int start_y) {
     }
 }
 
-
 void draw_circle(unsigned char* video_memory, int center_x, int center_y, int radius, unsigned char r, unsigned char g, unsigned char b) {
     for (int y = -radius; y <= radius; y++) {
         for (int x = -radius; x <= radius; x++) {
@@ -103,12 +131,23 @@ void draw_circle(unsigned char* video_memory, int center_x, int center_y, int ra
     }
 }
 
+extern unsigned int* global_video_memory;
+
 void swap_buffers() {
-    unsigned int* dest = (unsigned int*)0xD0000000;
+    if (global_video_memory == 0 || back_buffer32 == 0) return;
+
+    unsigned int* dest = global_video_memory;
+    unsigned int* src = back_buffer32;
+
     for (int i = 0; i < 1310720; i++) {
-        dest[i] = back_buffer32[i];
+        dest[i] = src[i];
     }
+
+    draw_rect((unsigned char*)global_video_memory, 0, 966, 1280, 58, 238, 238, 238, 255);
+    last_m = -1;
+    draw_time((unsigned char*)back_buffer32, (unsigned char*)global_video_memory);
 }
+
 
 void draw_restart(unsigned char* video_memory, int start_x, int start_y) {
     draw_circle(video_memory, start_x, start_y, 50, 0, 120, 212);
@@ -136,4 +175,25 @@ void draw_off_menu(unsigned char* back_buffer, int win_x, int win_y) {
     int icons_y = win_y + 100;
     draw_restart(back_buffer, restart_x, icons_y);
     draw_off(back_buffer, off_x, icons_y);
+}
+
+extern const unsigned char _binary_kernel_include_drivers_font_bin_start[];
+extern const unsigned char _binary_kernel_include_drivers_font_bin_end[];
+
+void draw_char(unsigned char* video_memory, int char_code, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b) {
+    static const unsigned char alpha_table[] = { 0, 255, 200, 125, 75 };
+    
+    const unsigned char* font_data = _binary_kernel_include_drivers_font_bin_start;
+    const unsigned char* char_glyph = font_data + (char_code * 12 * 6);
+
+    for (int row = 0; row < 12; row++) {
+        for (int col = 0; col < 6; col++) {
+            unsigned char pixel = char_glyph[row * 6 + col];
+            
+            if (pixel >= 1 && pixel <= 4) {
+                unsigned char alpha = alpha_table[pixel];
+                draw_rect(video_memory, start_x + col, start_y + row, 1, 1, r, g, b, alpha);
+            }
+        }
+    }
 }
