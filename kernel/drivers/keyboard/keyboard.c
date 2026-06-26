@@ -1,6 +1,6 @@
 #include <kernel.h>
 
-void io_wait(void) {
+/*void io_wait(void) {
     asm volatile("outb %%al, $0x80" : : "a"(0));
 }
 
@@ -12,14 +12,12 @@ unsigned char inb(unsigned short port) {
 
 void outb(unsigned short port, unsigned char val) {
     asm volatile("outb %0, %1" : : "a"(val), "Nd"(port));
-}
+}*/
 
-// Проверяет, появились ли данные в буфере (0-й бит порта 0x64)
-int keyboard_has_data(void) {
+/* int keyboard_has_data(void) {
     return (inb(0x64) & 1);
-}
+} */
 
-// Чистый возврат байта из порта данных 0x60
 unsigned char keyboard_read(void) {
     return inb(0x60);
 }
@@ -43,7 +41,7 @@ void mouse_wait (unsigned char type) {
 		while ((inb(0x64) & 1) == 0);
 	}
 }
-int mouse_has_data(void) {
+/* int mouse_has_data(void) {
 	unsigned char status = inb(0x64);
 	return ((status & 1) && (status & 0x20));
 }
@@ -59,7 +57,7 @@ unsigned short inw(unsigned short port) {
 	unsigned short result;
 	asm volatile("inw %1, %0" : "=a"(result) : "Nd"(port));
 	return result;
-}
+}*/
 
 void cpu_halt(void) {
     asm volatile("hlt");

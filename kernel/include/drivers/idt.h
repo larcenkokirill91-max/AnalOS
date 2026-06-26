@@ -4,6 +4,8 @@
 
 struct interrupt_frame;
 
+extern volatile unsigned int timer_ticks;
+
 struct idt_entry {
 	unsigned short offset_lower;
 	unsigned short selector;
@@ -12,7 +14,6 @@ struct idt_entry {
 	unsigned short offset_higher;
 } __attribute__((packed));
 
-// Здесь всё верно, extern указывает линкеру искать массив в idt.c
 extern struct idt_entry idt[256];
 
 struct idt_ptr {

@@ -2,6 +2,10 @@
 #ifndef SCREEN_H
 #define SCREEN_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void draw_rect(unsigned char* video_memory, int start_x, int start_y, int width, int height, unsigned char r, unsigned char g, unsigned char b, unsigned char a);
 void draw_os(unsigned char* video_memory, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b);
 void draw_cursor(unsigned char* video_memory, int start_x, int start_y);
@@ -12,5 +16,9 @@ void draw_time(unsigned char* back_buffer, unsigned char* video_memory);
 void draw_restart(unsigned char* video_memory, int start_x, int start_y);
 void draw_off(unsigned char* video_memory, int start_x, int start_y);
 void draw_off_menu(unsigned char* back_buffer, int win_x, int win_y);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

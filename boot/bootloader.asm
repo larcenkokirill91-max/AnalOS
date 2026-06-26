@@ -2,7 +2,6 @@
 [bits 16]
 
 KERNEL_OFFSET equ 0x10000
-VBE_INFO_ADDR equ 0x9000      ; Новое безопасное место для структуры VBE (не конфликтует со стеком)
 
 start:
     xor ax, ax
@@ -15,8 +14,8 @@ start:
 
     ; 1. Настройка графики VBE 1280x1024, 32 bit
     mov ax, 0x4F01
-    mov cx, 0x411B            ; 0x4000 (LFB) + 0x11B (режим)
-    mov di, VBE_INFO_ADDR     ; Заполняем структуру по адресу 0x9000
+    mov cx, 0x411B
+    mov di, 0x7000      ; Идеально согласуется с kernel.c (адрес 0x7000)
     int 0x10
     cmp ax, 0x004F
     jne video_error
@@ -37,15 +36,16 @@ start:
     mov dl, [boot_drive]
     int 0x13
 
-    ; === ЧТЕНИЕ ЯДРА ===
-    mov cx, 10          
-    mov bx, 0x1000      
+    ; === ЧТЕНИЕ ЯДРА (Безопасные порции для старых BIOS) ===
+    ; Изменили порцию: 31 итерация * 32 сектора = 992 сектора (~500 КБ)
+    mov cx, 31          
+    mov bx, 0x1000      ; Стартовый сегмент памяти (0x1000)
     
-    xor bp, bp          
-    mov si, 1           
+    xor bp, bp          ; Старшие 16 бит LBA = 0
+    mov si, 1           ; Младшие 16 бит LBA = 1
 
 load_loop:
-    push ecx            
+    push ecx            ; Сохраняем счетчик цикла
 
     ; Строим структуру DAP в стеке
     push word 0         
@@ -54,7 +54,7 @@ load_loop:
     push si             
     push bx             
     push word 0x0000    
-    push word 100       
+    push word 32        ; ИСПРАВЛЕНО: 32 сектора — абсолютно безопасный максимум для Intel BIOS
     push word 0x0010    
 
     mov ah, 0x42
@@ -66,11 +66,13 @@ load_loop:
     pop si              
     jc disk_error       
 
-    add sp, 16          
+    add sp, 16          ; Очищаем стек
     
-    add si, 100         
+    ; Сдвигаем параметры для следующей порции:
+    add si, 32          ; Продвигаем LBA адрес вперед на 32 сектора
     adc bp, 0           
-    add bx, 0x0C80      
+    ; ИСПРАВЛЕНО: Сдвигаем сегмент ОЗУ на 32 сектора вперед (16384 байт / 16 = 0x0400)
+    add bx, 0x0400      
 
     pop ecx             
     loop load_loop      
@@ -88,13 +90,13 @@ load_loop:
 video_error:
     mov ax, 0xB800
     mov es, ax
-    mov word [es:0], 0x0C56 
+    mov word [es:0], 0x0C56 ; Красная буква 'V' при ошибке видео
     jmp $
 
 disk_error:
     mov ax, 0xB800
     mov es, ax
-    mov word [es:0], 0x0944 
+    mov word [es:0], 0x0944 ; Красная буква 'D' при ошибке диска
     jmp $
 
 [bits 32]
@@ -109,11 +111,6 @@ init_pm:
     mov ebp, 0x90000
     mov esp, ebp
 
-    ; === ДОСТАЕМ АДРЕС ВИДЕОПАМЯТИ ИЗ СТРУКТУРЫ VBE ===
-    ; В структуре VBE Mode Info по смещению 40 (0x28) лежит 32-битный указатель на Linear Framebuffer
-    mov ebx, [VBE_INFO_ADDR + 0x28] 
-
-    ; Теперь в EBX находится динамический адрес видеопамяти текущего ПК!
     call KERNEL_OFFSET    
     jmp $
 
