@@ -47,10 +47,10 @@ The system boots via a **custom assembly bootloader**, switches to **32-bit prot
 - [ ] Multi-tasking and system optimization
 - [ ] Sound driver support
 
-### 🤝 Contributing (Nerves of Steel Required)
+### 🤝 Contributing
 The project frequently faces low-level development challenges. If you want to help, contributors are more than welcome! 
 
-Ideally, you should have **nerves of steel**, a deep understanding of **system languages**, and low-level development concepts. Feel free to open issues or submit PRs!
+Ideally, you should have a deep understanding of **system languages**, and low-level development concepts. Feel free to open issues or submit PRs!
 
 ---
 
@@ -83,10 +83,10 @@ Ideally, you should have **nerves of steel**, a deep understanding of **system l
 - [ ] Многозадачность и общая оптимизация системы
 - [ ] Поддержка звуковых драйверов
 
-### 🤝 Хотите помочь? (Нужны стальные нервы)
+### 🤝 Хотите помочь?
 Разработка ОС с нуля — штука непростая, и проект часто сталкивается с трудностями. Если у вас есть желание помочь развитию AnalOS, я буду только рад!
 
-Приветствуются люди со **стальными нервами** и отличным знанием **системных языков**. Создавайте Issue или присылайте Pull Request'ы!
+Приветствуются люди со отличным знанием **системных языков**. Создавайте !
 
 ---
 <p align="center">Разработано с ❤️ для open-source сообщества.</p>
