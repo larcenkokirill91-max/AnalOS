@@ -21,7 +21,7 @@
 ## English
 
 ### 📝 About the Project
-**AnalOS** is an independent, lightweight, experimental 32-bit operating system for the **x86** architecture, built entirely from scratch by a single developer. The compiled OS image takes up only **10 MB**.
+**AnalOS** is an independent, lightweight 32-bit operating system for the **x86** architecture, built entirely from scratch by a single developer. The compiled OS image takes up only **10 MB**.
 
 The system boots via a **custom assembly bootloader**, switches to **32-bit protected mode**, and implements modern interrupt handling. Testing is performed both in the **QEMU** emulator and on bare metal (**Intel Celeron**).
 
@@ -57,7 +57,7 @@ Ideally, you should have **nerves of steel**, a deep understanding of **system l
 ## Русский
 
 ### 📝 О проекте
-**AnalOS** — это независимая, легковесная, экспериментальная 32-битная операционная система для архитектуры **x86**, разрабатываемая с нуля силами одного человека. Вес готового образа составляет всего **10 мегабайт**.
+**AnalOS** — это независимая, легковесная 32-битная операционная система для архитектуры **x86**, разрабатываемая с нуля силами одного человека. Вес готового образа составляет всего **10 мегабайт**.
 
 Система запускается через **собственный загрузчик на Assembly**, успешно переходит в **защищённый 32-битный режим** и работает с прерываниями. Тестирование проекта проходит как в эмуляторе **QEMU**, так и на реальном железе (**Intel Celeron**).
 
