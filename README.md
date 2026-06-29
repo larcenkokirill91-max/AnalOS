@@ -50,7 +50,7 @@ The system boots via a **custom assembly bootloader**, switches to **32-bit prot
 ### 🤝 Contributing
 The project frequently faces low-level development challenges. If you want to help, contributors are more than welcome! 
 
-Ideally, you should have a deep understanding of **system languages**, and low-level development concepts. Feel free to open issues or submit PRs!
+Ideally, you should have a deep understanding of **system languages**, and low-level development concepts. Feel free to open issues or submit PRs. My TikTok: https://www.tiktok.com/@_analos_?is_from_webapp=1&sender_device=pc !
 
 ---
 
@@ -86,7 +86,7 @@ Ideally, you should have a deep understanding of **system languages**, and low-l
 ### 🤝 Хотите помочь?
 Разработка ОС с нуля — штука непростая, и проект часто сталкивается с трудностями. Если у вас есть желание помочь развитию AnalOS, я буду только рад!
 
-Приветствуются люди со отличным знанием **системных языков**. Создавайте !
+Приветствуются люди со отличным знанием **системных языков**. Создавайте код, пишите мне на почту или в тик ток аккаунт от которого вы скорее всего и пришли: https://www.tiktok.com/@_analos_?is_from_webapp=1&sender_device=pc !
 
 ---
 <p align="center">Разработано с ❤️ для open-source сообщества.</p>
