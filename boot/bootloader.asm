@@ -21,7 +21,7 @@ start:
     jne video_error
 
     mov ax, 0x4F02
-    mov bx, 0x411B      
+    mov bx, 0x411B     
     int 0x10
     cmp ax, 0x004F
     jne video_error

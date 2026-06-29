@@ -1,5 +1,7 @@
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 1024
+#define STATIC_VIDEO_MEMORY ((unsigned int*)0xD0000000)
+#define STATIC_PITCH_DW 1280
 #define WIN_HH 25
 
 #include <kernel.h>
@@ -7,11 +9,13 @@
 
 // 1. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ЯДРА
 unsigned int screen_pitch = 5120;
-int pitch_dw = 1280;
 int global_pitch_dw = 1280;
-unsigned int* global_video_memory = (unsigned int*)0xD0000000;
+unsigned int* global_video_memory = 0;
 
-unsigned int* back_buffer32 = 0; 
+int pitch_dw = 1280; 
+
+static unsigned int static_back_buffer[1280 * 1024];
+unsigned int* back_buffer32 = static_back_buffer;
 
 int mouse_x = 0;
 int mouse_y = 0;
@@ -29,11 +33,24 @@ int last_y = -1;
 
 void mouse_init();
 void idt_init();
+struct window;
 void draw_window(unsigned char* video_memory, struct window* win);
 void swap_buffers();
 void draw_cursor(unsigned char* video_memory, int start_x, int start_y);
 void draw_xor_frame(unsigned int* video_memory, int x, int y, int w, int h, int pitch);
 void draw_char(unsigned char* video_memory, int char_code, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b);
+void cpp_init_windows();
+void cpp_draw_windows(unsigned char* video_memory);
+void cpp_draw_single_window(unsigned char* video_memory, int idx);
+void cpp_set_window_visible(int idx, int visible);
+int cpp_get_window_is_visible(int idx);
+void cpp_set_window_position(int idx, int new_x, int new_y);
+int cpp_get_window_x(int idx);
+int cpp_get_window_y(int idx);
+int cpp_get_window_width(int idx);
+int cpp_get_window_height(int idx);
+void cpp_draw_taskbar_widgets(unsigned char* back_buffer);
+int cpp_handle_mouse_hover(int mouse_x, int mouse_y);
 
 void render(unsigned char* video_memory, struct superblock* fs) {
     if (!video_memory) return;
@@ -90,24 +107,24 @@ void draw_time(unsigned char* back_buffer, unsigned char* video_memory) {
         draw_char(back_buffer, fh + 16, time_x,      979, 0, 0, 0); 
         draw_char(back_buffer, lh + 16, time_x + 8,  979, 0, 0, 0); 
         draw_char(back_buffer, 26,      time_x + 14, 979, 0, 0, 0); // Двоеточие
-        draw_char(back_buffer, fm + 16, time_x + 20, 979, 0, 0, 0); 
-        draw_char(back_buffer, lm + 16, time_x + 28, 979, 0, 0, 0); 
+        draw_char(back_buffer, fm + 16, time_x + 18, 979, 0, 0, 0); 
+        draw_char(back_buffer, lm + 16, time_x + 26, 979, 0, 0, 0); 
 
         // СТРОКА 2: ДАТА (Y 1001)
         int date_x = 1130; 
 
-        draw_char(back_buffer, fd + 16,   date_x,      1001, 0, 0, 0); 
-        draw_char(back_buffer, ld + 16,   date_x + 8,  1001, 0, 0, 0); 
-        draw_char(back_buffer, 14,        date_x + 16, 1001, 0, 0, 0); // Точка
+        draw_char(back_buffer, fd + 16,   date_x,      1001, 0, 0, 0);
+        draw_char(back_buffer, ld + 16,   date_x + 8,  1001, 0, 0, 0);
+        draw_char(back_buffer, 14,        date_x + 14, 1004, 0, 0, 0); // Точка
         
-        draw_char(back_buffer, fmth + 16, date_x + 24, 1001, 0, 0, 0); 
-        draw_char(back_buffer, lmth + 16, date_x + 32, 1001, 0, 0, 0); 
-        draw_char(back_buffer, 14,        date_x + 40, 1001, 0, 0, 0); // Точка
+        draw_char(back_buffer, fmth + 16, date_x + 22, 1001, 0, 0, 0);
+        draw_char(back_buffer, lmth + 16, date_x + 30, 1001, 0, 0, 0);
+        draw_char(back_buffer, 14,        date_x + 36, 1004, 0, 0, 0); // Точка
         
-        draw_char(back_buffer, y1 + 16,   date_x + 48, 1001, 0, 0, 0); 
-        draw_char(back_buffer, y2 + 16,   date_x + 56, 1001, 0, 0, 0); 
-        draw_char(back_buffer, y3 + 16,   date_x + 64, 1001, 0, 0, 0); 
-        draw_char(back_buffer, y4 + 16,   date_x + 72, 1001, 0, 0, 0); 
+        draw_char(back_buffer, y1 + 16,   date_x + 44, 1001, 0, 0, 0);
+        draw_char(back_buffer, y2 + 16,   date_x + 52, 1001, 0, 0, 0);
+        draw_char(back_buffer, y3 + 16,   date_x + 60, 1001, 0, 0, 0);
+        draw_char(back_buffer, y4 + 16,   date_x + 68, 1001, 0, 0, 0);
 
         unsigned int* src32 = (unsigned int*)back_buffer; 
         unsigned int* dst32 = (unsigned int*)video_memory; 
@@ -212,32 +229,34 @@ void free(void* ptr) {
 
 __attribute__((section(".text.entry")))
 void kernel_main(void) {
-    unsigned int* vbe_info_struct = (unsigned int*)0x9000;
+    unsigned int* vbe_info_struct = (unsigned int*)0x7000;
     unsigned int* real_lfb = (unsigned int*)(vbe_info_struct[0x28 / 4]); 
 
-    if (real_lfb != 0) {
+    if (real_lfb != 0 && real_lfb != (unsigned int*)0xFFFFFFFF) {
         global_video_memory = real_lfb;
     } else {
-        global_video_memory = (unsigned int*)0xD0000000;
+        global_video_memory = (unsigned int*)0xFD000000;
     }
+
+    unsigned int check_addr = (unsigned int)global_video_memory;
+    if (check_addr == 0xFD000000 || check_addr == 0xE0000000) {
+        pitch_dw = 1280;
+    } else {
+        pitch_dw = 1280; 
+    }
+    global_pitch_dw = pitch_dw;
 
     unsigned int* video_memory32 = global_video_memory;
-
     struct superblock* fs = (struct superblock*)0x15800;
-    unsigned int* window_bg_buffer = (unsigned int*)0x01000000;
-    
-    back_buffer32 = (unsigned int*)malloc(1280 * 1024 * sizeof(unsigned int));
-    if (back_buffer32 == 0) {
-        back_buffer32 = (unsigned int*)0x05000000; 
-    }
 
-    unsigned int time_counter = 0;
     int old_win_x = 0;
     int old_win_y = 0;
     int is_dragging = 0;
     int frame_x = 0;
     int frame_y = 0;
     
+    render((unsigned char*)back_buffer32, fs);
+
     unsigned char selected_option = 0;
     static unsigned char prev_left_button = 0;
     static unsigned int last_printed_tick = 0;
@@ -245,26 +264,36 @@ void kernel_main(void) {
     mouse_init();
     idt_init();
     heap_init();
-    cpp_init_windows();
     
+    back_buffer32 = (unsigned int*)malloc(1280 * 1024 * sizeof(unsigned int));
+    
+    if (!back_buffer32) {
+        back_buffer32 = (unsigned int*)0x02000000;
+    }
+
+    cpp_init_windows();
+
     dragged_window_idx = -1;
     prev_left_button = 0;
     menu_open = 0;
     start_menu_open = 0;
     
     render((unsigned char*)back_buffer32, fs);
-    
     for (int i = 0; i < 3; i++) {
         if (cpp_get_window_is_visible(i)) {
             cpp_draw_single_window((unsigned char*)back_buffer32, i);
         }
     }
-
+    // cpp_draw_taskbar_widgets((unsigned char*)back_buffer32);
+    
     swap_buffers();
     draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
     beep();
+
     while(1) {
+                // ====================================================================
         // --- 1. ОБРАБОТКА МЫШИ ПО СОБЫТИЮ IRQ12 ---
+        // ====================================================================
         int mouse_ready_flag = 0;
         signed char local_packet[3];
 
@@ -277,43 +306,61 @@ void kernel_main(void) {
             clear_mouse_flag();
         }
         __asm__ __volatile__("sti");
-
         if (mouse_ready_flag) {
-            for (int y = 0; y < 16; y++) {
-                for (int x = 0; x < 16; x++) {
-                    int screen_idx = (mouse_y + y) * pitch_dw + (mouse_x + x);
-                    if (screen_idx >= 0 && screen_idx < 1280 * 1024) {
-                        video_memory32[screen_idx] = back_buffer32[screen_idx]; 
-                    }
+            for (int y_offset = 0; y_offset < 16; y_offset++) {
+                int current_y = mouse_y + y_offset;
+                if (current_y < 0 || current_y >= 1024) continue;
+
+                int row_offset = current_y * 1280; 
+
+                for (int x_offset = 0; x_offset < 16; x_offset++) {
+                    int current_x = mouse_x + x_offset;
+                    if (current_x < 0 || current_x >= 1280) continue;
+
+                    int screen_idx = row_offset + current_x;
+                    
+                    video_memory32[screen_idx] = back_buffer32[screen_idx]; 
                 }
             }
-
             signed char move_x = local_packet[1];
             signed char move_y = local_packet[2];
             mouse_x += move_x;
             mouse_y -= move_y;
 
+
+            /* Ограничиваем координаты границами экрана 1280x1024 */
             if (mouse_x < 0) mouse_x = 0;
             if (mouse_y < 0) mouse_y = 0;
             if (mouse_x > SCREEN_WIDTH - 16) mouse_x = SCREEN_WIDTH - 16;
             if (mouse_y > SCREEN_HEIGHT - 16) mouse_y = SCREEN_HEIGHT - 16;
 
+            /* Логика клика левой кнопкой мыши */
             unsigned char left_button = (local_packet[0] & 0x01);
             if (left_button == 1) {
+                /* Если кнопка только что нажата и мы ничего не тащим, ищем окно для захвата */
                 if (prev_left_button == 0 && dragged_window_idx == -1 && start_menu_open == 0) {
                     for (int i = 0; i < 3; i++) {
-                        if (cpp_get_window_is_visible(i) && mouse_x >= cpp_get_window_x(i) && mouse_x <= (cpp_get_window_x(i) + cpp_get_window_width(i)) && mouse_y >= cpp_get_window_y(i) && mouse_y <= (cpp_get_window_y(i) + WIN_HH)) {
+                        if (cpp_get_window_is_visible(i) && 
+                            mouse_x >= cpp_get_window_x(i) && 
+                            mouse_x <= (cpp_get_window_x(i) + cpp_get_window_width(i)) && 
+                            mouse_y >= cpp_get_window_y(i) && 
+                            mouse_y <= (cpp_get_window_y(i) + WIN_HH)) {
+                            
                             dragged_window_idx = i;
                             old_win_x = cpp_get_window_x(i);
                             old_win_y = cpp_get_window_y(i);
                             is_dragging = 1; 
                             frame_x = cpp_get_window_x(i);
                             frame_y = cpp_get_window_y(i);
+                            
+                            /* Рисуем стартовую XOR-рамку прямо на экране */
                             draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(i), cpp_get_window_height(i), pitch_dw);
                             break;
                         }
                     }
                 }
+                
+                /* Если окно уже тащат и мышь сдвинулась — обновляем XOR-рамку */
                 if (dragged_window_idx != -1 && (move_x != 0 || move_y != 0)) {
                     draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(dragged_window_idx), cpp_get_window_height(dragged_window_idx), pitch_dw);
                     frame_x += move_x;
@@ -321,26 +368,59 @@ void kernel_main(void) {
                     draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(dragged_window_idx), cpp_get_window_height(dragged_window_idx), pitch_dw);
                 }
             } else {
+                /* Кнопка отпущена — если тащили окно, фиксируем его новую позицию */
                 if (dragged_window_idx != -1 && is_dragging == 1) {
                     draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(dragged_window_idx), cpp_get_window_height(dragged_window_idx), pitch_dw);
                     cpp_set_window_position(dragged_window_idx, frame_x, frame_y);
-                    render((unsigned char*)back_buffer32, fs);
-                    cpp_draw_windows((unsigned char*)back_buffer32);
-                    if (menu_open == 1) {
-                        int win0_x = cpp_get_window_x(0);
-                        int win0_y = cpp_get_window_y(0);
-                        
-                        draw_off_menu((unsigned char*)back_buffer32, win0_x, win0_y);
-                        int current_line_x = (selected_option == 1) ? (win0_x + 300) : (win0_x + 50);
-                        int current_line_y = win0_y + 165;
-                        draw_rect((unsigned char*)back_buffer32, current_line_x, current_line_y, 100, 4, 0, 120, 212, 255);
-                    }
-                    swap_buffers();
-                    is_dragging = 0;
+                    
+                    /* Флаг сбросится, но рендеринг кадра ниже всё равно отработает, так как is_dragging ещё равен 1 */
                 }
-                dragged_window_idx = -1;
             }
             prev_left_button = left_button;
+            
+            /* Рисуем курсор мыши на новой позиции поверх старого кадра видеопамяти */
+            draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
+        }
+
+        // ====================================================================
+        // --- ИЗОЛИРОВАННЫЙ КРИТИЧЕСКИЙ БЛОК ОБНОВЛЕНИЯ ИНТЕРФЕЙСА (РЕНДЕРИНГ) ---
+        // ====================================================================
+        /* ВЫНЕСЕНО ИЗ ELSE: Выполняется всегда, когда система требует перерисовки */
+        if (is_dragging == 1 || menu_open == 1) {
+            
+            // 1. ПОЛНОСТЬЮ ВЫКЛЮЧАЕМ ПРЕРЫВАНИЯ перед началом формирования кадра
+            __asm__ __volatile__("cli");
+
+            // 2. Очищаем задний буфер в синий цвет (базовый рабочий стол)
+            render((unsigned char*)back_buffer32, fs);
+
+            // 3. Отрисовываем все видимые C++ окна поверх фона в задний буфер
+            cpp_draw_windows((unsigned char*)back_buffer32);
+
+            // 4. ОРИГИНАЛЬНАЯ ОТРИСОВКА ВАШЕГО МЕНЮ (внутри безопасного буфера)
+            if (menu_open == 1) {
+                int win0_x = cpp_get_window_x(0);
+                int win0_y = cpp_get_window_y(0);
+                
+                draw_off_menu((unsigned char*)back_buffer32, win0_x, win0_y);
+                
+                int current_line_x = (selected_option == 1) ? (win0_x + 300) : (win0_x + 50);
+                int current_line_y = win0_y + 165;
+                draw_rect((unsigned char*)back_buffer32, current_line_x, current_line_y, 100, 4, 0, 120, 212, 255);
+            }
+
+            // cpp_draw_taskbar_widgets((unsigned char*)back_buffer32);
+            //draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
+
+            swap_buffers();
+
+            __asm__ __volatile__("sti");
+
+            if (prev_left_button == 0 && is_dragging == 1) {
+                is_dragging = 0;
+                dragged_window_idx = -1;
+            }
+
             draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
         }
 
@@ -376,6 +456,9 @@ void kernel_main(void) {
                 draw_off_menu((unsigned char*)back_buffer32, cpp_get_window_x(0), cpp_get_window_y(0));
                 draw_rect((unsigned char*)back_buffer32, start_left_x, start_line_y, 100, 4, 0, 120, 212, 255);
                 
+                last_m = -1;
+                // draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
+                
                 swap_buffers();
                 draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
             }
@@ -398,8 +481,15 @@ void kernel_main(void) {
                     cpp_set_window_visible(0, 0);
                     render((unsigned char*)back_buffer32, fs);
                     for (int i = 0; i < 3; i++) {
-                        if (cpp_get_window_is_visible(i)) cpp_draw_single_window((unsigned char*)back_buffer32, i);
+                        if (cpp_get_window_is_visible(i)) {
+                            cpp_draw_single_window((unsigned char*)back_buffer32, i);
+                        }
                     }
+                    cpp_draw_taskbar_widgets((unsigned char*)back_buffer32);
+                    
+                    last_m = -1;
+                    draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
+                    
                     swap_buffers();
                     draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
                 } 
@@ -421,23 +511,23 @@ void kernel_main(void) {
         }
 
         // --- 3. ОБНОВЛЕНИЕ ВРЕМЕНИ ПО ТАЙМЕРУ PIT (IRQ0) ---
-    __asm__ __volatile__("cli");
-    if (timer_ticks - last_printed_tick >= 18) {
-        last_printed_tick += 18; 
-        __asm__ __volatile__("sti"); 
-
-        draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
-        
-        if (mouse_x >= 1180 && mouse_y >= 990) {
-            draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
-        }
-        __asm__ __volatile__("cli"); 
-    }
-
-        if (!mouse_has_data() && !keyboard_has_data()) {
-            __asm__ __volatile__("sti\n\thlt"); 
-        } else {
-            __asm__ __volatile__("sti"); 
-        }
+        //__asm__ __volatile__("cli");
+        //if (timer_ticks - last_printed_tick >= 18) {
+        //    last_printed_tick += 18; 
+        //    __asm__ __volatile__("sti"); 
+//
+  //          draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
+    //        
+      //      if (mouse_x >= 1180 && mouse_y >= 990) {
+        //        draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
+          //  }
+            //__asm__ __volatile__("cli"); 
+        //}
+//
+  //      if (!mouse_has_data() && !keyboard_has_data()) {
+    //        __asm__ __volatile__("sti\n\thlt"); 
+      //  } else {
+        //    __asm__ __volatile__("sti"); 
+        //}
     }
 }

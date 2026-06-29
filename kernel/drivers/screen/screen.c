@@ -1,4 +1,6 @@
 #include <kernel.h>
+#include <stdint.h>
+#include "wallpaper.h"
 
 extern unsigned int screen_pitch;
 extern int pitch_dw;
@@ -52,27 +54,24 @@ static const unsigned char graphics_cursor[16][16] = {
     {2, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0}
 };
 
-void draw_rect(unsigned char* video_memory, int start_x, int start_y, int width, int height, unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
-    if (a == 0) return; 
-    for (int y = start_y; y < start_y + height; y++) {
-        for (int x = start_x; x < start_x + width; x++) {
-            
-            int offset = (y * screen_pitch) + (x * 4);
-            
-            if (a == 255) {
-                video_memory[offset]     = b;
-                video_memory[offset + 1] = g;
-                video_memory[offset + 2] = r;
-                video_memory[offset + 3] = 255;
-            } else {
-                unsigned char bg_b = video_memory[offset];
-                unsigned char bg_g = video_memory[offset + 1];
-                unsigned char bg_r = video_memory[offset + 2];
-                video_memory[offset]     = (unsigned char)(((b - bg_b) * a) >> 8) + bg_b;
-                video_memory[offset + 1] = (unsigned char)(((g - bg_g) * a) >> 8) + bg_g;
-                video_memory[offset + 2] = (unsigned char)(((r - bg_r) * a) >> 8) + bg_r;
-                video_memory[offset + 3] = 255;
-            }
+void draw_rect(unsigned char* buffer, int x, int y, int width, int height, unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
+    if (!buffer) return;
+    
+    unsigned int* buf32 = (unsigned int*)buffer;
+    
+    unsigned int color = (r << 16) | (g << 8) | b;
+
+    int start_y = (y < 0) ? 0 : y;
+    int end_y = (y + height > 1024) ? 1024 : (y + height);
+
+    int start_x = (x < 0) ? 0 : x;
+    int end_x = (x + width > 1280) ? 1280 : (x + width);
+
+    for (int current_y = start_y; current_y < end_y; current_y++) {
+        int row_offset = current_y * 1280;
+        
+        for (int current_x = start_x; current_x < end_x; current_x++) {
+            buf32[row_offset + current_x] = color;
         }
     }
 }
@@ -134,20 +133,24 @@ void draw_circle(unsigned char* video_memory, int center_x, int center_y, int ra
 extern unsigned int* global_video_memory;
 
 void swap_buffers() {
-    if (global_video_memory == 0 || back_buffer32 == 0) return;
-
-    unsigned int* dest = global_video_memory;
-    unsigned int* src = back_buffer32;
-
-    for (int i = 0; i < 1310720; i++) {
-        dest[i] = src[i];
+    uint16_t* dest = (uint16_t*)global_video_memory;
+    uint32_t* src = back_buffer32;
+    if (!dest || !src) return;
+    int vbe_pitch_w16 = 1280; 
+    for (int current_y = 0; current_y < 1024; current_y++) {
+        int v_offset = current_y * vbe_pitch_w16; 
+        int b_offset = current_y * 1280;     
+        for (int current_x = 0; current_x < 1280; current_x++) {
+            uint32_t c32 = src[b_offset + current_x];
+            uint8_t r = (c32 >> 16) & 0xFF;
+            uint8_t g = (c32 >> 8)  & 0xFF;
+            uint8_t b = c32         & 0xFF;
+            uint16_t c16 = ((b & 0xF8) << 8) | ((g & 0xFC) << 3) | (r >> 3);
+            dest[v_offset + current_x] = c16;
+        }
     }
-
-    draw_rect((unsigned char*)global_video_memory, 0, 966, 1280, 58, 238, 238, 238, 255);
-    last_m = -1;
-    draw_time((unsigned char*)back_buffer32, (unsigned char*)global_video_memory);
+    asm volatile ("outw %0, %1" : : "a"((uint16_t)4), "Nd"((uint16_t)0x01CE));
 }
-
 
 void draw_restart(unsigned char* video_memory, int start_x, int start_y) {
     draw_circle(video_memory, start_x, start_y, 50, 0, 120, 212);
@@ -197,3 +200,39 @@ void draw_char(unsigned char* video_memory, int char_code, int start_x, int star
         }
     }
 }
+
+void draw_wallpaper(unsigned char* video_memory) {
+    int img_idx = 0; 
+
+    for (int y = 0; y < WALLPAPER_HEIGHT; y++) {
+        for (int x = 0; x < WALLPAPER_WIDTH; x++) {
+            
+            unsigned char r = wallpaper_data[img_idx];
+            unsigned char g = wallpaper_data[img_idx + 1];
+            unsigned char b = wallpaper_data[img_idx + 2];
+            unsigned char a = wallpaper_data[img_idx + 3];
+            img_idx += 4;
+
+            if (a == 0) continue;
+
+            int offset = (y * screen_pitch) + (x * 4);
+
+            if (a == 255) {
+                video_memory[offset]     = b;
+                video_memory[offset + 1] = g;
+                video_memory[offset + 2] = r;
+                video_memory[offset + 3] = 255;
+            } else {
+                unsigned char bg_b = video_memory[offset];
+                unsigned char bg_g = video_memory[offset + 1];
+                unsigned char bg_r = video_memory[offset + 2];
+                
+                video_memory[offset]     = (unsigned char)(((b - bg_b) * a) >> 8) + bg_b;
+                video_memory[offset + 1] = (unsigned char)(((g - bg_g) * a) >> 8) + bg_g;
+                video_memory[offset + 2] = (unsigned char)(((r - bg_r) * a) >> 8) + bg_r;
+                video_memory[offset + 3] = 255;
+            }
+        }
+    }
+}
+

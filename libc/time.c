@@ -20,7 +20,9 @@ void get_rtc_time(int* years, int* mounth, int* days, int* hours, int* minutes, 
 	*years   = (bcd_yer & 0x0F) + ((bcd_yer >> 4) * 10);
 }
 void timer_wait(int ticks) {
-    for (volatile int i = 0; i < ticks * 50000000; i++) { 
-        __asm__ __volatile__("nop");
+    unsigned int eticks;
+    eticks = timer_ticks + ticks;
+    while(timer_ticks < eticks) {
+        __asm__ volatile("hlt");
     }
 }

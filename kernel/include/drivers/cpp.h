@@ -1,6 +1,7 @@
 #pragma once
 #ifndef CPP
 #define CPP
+#include "../../../gui/gui.hpp"
 void cpp_init_windows();
 void cpp_draw_windows(unsigned char* video_memory);
 void cpp_draw_single_window(unsigned char* video_memory, int idx);

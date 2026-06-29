@@ -3,7 +3,7 @@
 volatile unsigned int timer_ticks = 0; 
 unsigned char current_scancode = 0;
 
-signed char mouse_packet[3]; 
+signed char mouse_packet[3];
 
 static volatile int kbd_ready = 0;
 static volatile int mouse_ready = 0;
@@ -29,31 +29,28 @@ void clear_mouse_flag(void) {
     mouse_ready = 0;
 }
 
-// НОВОЕ: Обработчик прерываний таймера PIT (IRQ0 -> Вектор 32)
-// Без него Celeron засыпает в инструкции hlt навсегда!
-__attribute__((interrupt))
-void timer_handler(struct interrupt_frame* frame) {
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void timer_handler_c(void) {
     timer_ticks++;
-    outb(0x20, 0x20); // Отправляем End of Interrupt (EOI) в ведущий PIC
+    outb(0x20, 0x20);
 }
 
-__attribute__((interrupt))
-void keyboard_handler(struct interrupt_frame* frame) {
+void keyboard_handler_c(void) {
     current_scancode = inb(0x60); 
     kbd_ready = 1;        
-    outb(0x20, 0x20); // Отправляем EOI в ведущий PIC
+    outb(0x20, 0x20);
 }
 
-__attribute__((interrupt))
-void mouse_handler(struct interrupt_frame* frame) {
+void mouse_handler_c(void) {
     unsigned char status = inb(0x64);
     
-    // Проверяем, что буфер заполнен и данные пришли именно от мыши (бит 5 выставлен)
     if ((status & 0x21) == 0x21) {
         unsigned char data = inb(0x60);
         
         if (mouse_cycle == 0 && (data & 0x08) == 0) {
-            // Сбой синхронизации пакета, игнорируем некорректный байт
         } else {
             mouse_packet[mouse_cycle] = (signed char)data;
             mouse_cycle++;
@@ -65,14 +62,17 @@ void mouse_handler(struct interrupt_frame* frame) {
         }
     }
     
-    outb(0xA0, 0x20); // Отправляем EOI в ведомый PIC
-    outb(0x20, 0x20); // Отправляем EOI в ведущий PIC
-}
-
-__attribute__((interrupt))
-void default_handler(struct interrupt_frame* frame) {
+    outb(0xA0, 0x20);
     outb(0x20, 0x20);
 }
+
+void default_handler_c(void) {
+    outb(0x20, 0x20);
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 void idt_set_gate(int num, unsigned int handler, unsigned short selector, unsigned char flags) {
     idt[num].offset_lower = handler & 0xFFFF;
@@ -85,8 +85,8 @@ void idt_set_gate(int num, unsigned int handler, unsigned short selector, unsign
 void pic_remap(void) {
     outb(0x20, 0x11); io_wait();
     outb(0xA0, 0x11); io_wait();
-    outb(0x21, 0x20); io_wait(); // Ведущий PIC теперь на векторах 32-39
-    outb(0xA1, 0x28); io_wait(); // Ведомый PIC теперь на векторах 40-47
+    outb(0x21, 0x20); io_wait();
+    outb(0xA1, 0x28); io_wait();
     outb(0x21, 0x04); io_wait();
     outb(0xA1, 0x02); io_wait();
     outb(0x21, 0x01); io_wait();
@@ -141,6 +141,11 @@ void mouse_init(void) {
     inb(0x60);
 }
 
+extern void timer_asm_handler(void);
+extern void keyboard_asm_handler(void);
+extern void mouse_asm_handler(void);
+extern void default_asm_handler(void);
+
 __attribute__((aligned(16))) struct idt_ptr ptr;
 void idt_init(void) {
     pic_remap();
@@ -149,12 +154,12 @@ void idt_init(void) {
     ptr.addres = (unsigned int)&idt;
     
     for (int num = 0; num < 256; num++) {
-        idt_set_gate(num, (unsigned int)default_handler, 0x08, 0x8E);
+        idt_set_gate(num, (unsigned int)default_asm_handler, 0x08, 0x8E);
     }
     
-    idt_set_gate(32, (unsigned int)timer_handler, 0x08, 0x8E);    // Инициализируем IRQ0 (Таймер)
-    idt_set_gate(33, (unsigned int)keyboard_handler, 0x08, 0x8E); // Инициализируем IRQ1 (Клавиатура)
-    idt_set_gate(44, (unsigned int)mouse_handler, 0x08, 0x8E);    // Инициализируем IRQ12 (Мышь)
+    idt_set_gate(32, (unsigned int)timer_asm_handler, 0x08, 0x8E);    // IRQ0
+    idt_set_gate(33, (unsigned int)keyboard_asm_handler, 0x08, 0x8E); // IRQ1
+    idt_set_gate(44, (unsigned int)mouse_asm_handler, 0x08, 0x8E);    // IRQ12
     
     __asm__ __volatile__("lidt (%0)" : : "r"(&ptr));
     __asm__ __volatile__("sti"); 

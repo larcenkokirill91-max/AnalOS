@@ -9,16 +9,16 @@ start:
 
     xor ax, ax
     mov ds, ax
-    mov es, ax
+    mov es, ax          
     mov ss, ax
     mov sp, 0x7C00      
 
     mov [boot_drive], dl
 
-    ; Настройка графики 1280x1024
+    ; 1. Настройка графики VBE 1280x1024, 32 bit
     mov ax, 0x4F01
-    mov cx, 0x411B      
-    mov di, 0x9000      
+    mov cx, 0x411B     
+    mov di, 0x9000      ; Структура VBE строго на 0x9000 для kernel.c
     int 0x10
     cmp ax, 0x004F
     jne video_error
@@ -29,18 +29,14 @@ start:
     cmp ax, 0x004F
     jne video_error
 
+    ; 2. Включение линии A20
     in al, 0x92
     or al, 2
     out 0x92, al
 
-  mov cx, [0x9000 + 0x10]   ; Запоминаем Pitch в байтах, пока мы в 16-битном режиме!
-  lgdt [gdt_descriptor]
-  mov eax, cr0
-  or eax, 0x1
-  mov cr0, eax
-
-  jmp CODE_SEG:init_pm
-
+    ; 3. Переход в защищенный режим
+    lgdt [gdt_descriptor]
+    mov eax, cr0
     or eax, 0x1
     mov cr0, eax
 
@@ -63,18 +59,16 @@ init_pm:
 
     ; Чтение ядра напрямую через порты диска ATA PIO
     mov edi, KERNEL_OFFSET
-    mov ebx, 1          ; Стартовый сектор LBA (0 - загрузчик, 1 - начало ядра)
-    mov ecx, 1000       ; Сколько секторов читать (согласуется с размером в Makefile)
+    mov ebx, 1          ; Стартовый сектор LBA
+    mov ecx, 400        ; Читаем 400 секторов с запасом под весь C++ код
 
-.read_loop:
+read_loop:
     push ecx
     
-    ; 1. Выдаем количество секторов (1 сектор за итерацию)
     mov dx, 0x1F2
     mov al, 1
     out dx, al
 
-    ; 2. Передаем LBA адрес (28-bit) в порты
     mov eax, ebx
     mov dx, 0x1F3
     out dx, al          
@@ -91,38 +85,30 @@ init_pm:
 
     mov eax, ebx
     shr eax, 24
-    or al, 0xE0         ; Режим LBA + Master Drive
+    and al, 0x0F
+    or al, 0xE0         
     mov dx, 0x1F6
     out dx, al
 
-    ; 3. Команда "Чтение секторов с повтором" (Read Sectors With Retry)
     mov dx, 0x1F7
     mov al, 0x20
     out dx, al
 
-; 4. Ожидаем готовности контроллера диска
-.wait_disk:
+wait_disk:
     in al, dx
-    test al, 0x80       ; Статус BSY (Busy) должен быть 0
-    jnz .wait_disk
-    test al, 0x08       ; Статус DRQ (Data Request) должен быть 1
-    jz .wait_disk
+    test al, 0x80       
+    jnz wait_disk
+    test al, 0x08       
+    jz wait_disk
 
-    ; 5. Читаем сектор (256 слов по 2 байта = 512 байт)
     mov ecx, 256
     mov dx, 0x1F0
-    rep insw            ; Читает из порта DX в память [EDI], И САМА ДВИГАЕТ EDI ВПЕРЁД!
+    rep insw            
 
-    inc ebx             ; Переходим к следующему LBA сектору
+    inc ebx             
     pop ecx
-    loop .read_loop     
+    loop read_loop     
 
-    ; Достаем адрес видеопамяти для ядра из структуры VBE (как в основном загрузчике)
-    ; Достаем адрес видеопамяти для ядра из структуры VBE
-    mov ebx, [0x9000 + 0x28] 
-    ; НОВОЕ: Достаем Pitch (BytesPerScanLine) — это 16-битное число по смещению 0x10
-    movzx ecx, word [0x9000 + 0x10]
-    ; Прыгаем на физический адрес ядра
     jmp CODE_SEG:KERNEL_OFFSET    
     jmp $
 
@@ -144,6 +130,8 @@ gdt_descriptor:
 
 CODE_SEG equ gdt_code - gdt_start
 DATA_SEG equ gdt_data - gdt_start
-boot_drive db 0
+
+boot_drive db 0      ; ПЕРЕМЕННАЯ ВОССТАНОВЛЕНА И ТЕПЕРЬ ВИДНА СВЕРХУ
+
 times 510-($-$$) db 0
 dw 0xaa55

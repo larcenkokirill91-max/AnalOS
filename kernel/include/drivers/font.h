@@ -8,7 +8,7 @@
 extern const unsigned char _binary_kernel_include_drivers_font_bin_start[];
 extern const unsigned char _binary_kernel_include_drivers_font_bin_end[];
 
-void draw_char(unsigned char* video_memory, int char_code, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b) {
+static void draw_char(unsigned char* video_memory, int char_code, int start_x, int start_y, unsigned char r, unsigned char g, unsigned char b) {
     static const unsigned char alpha_table[] = { 0, 255, 200, 125, 75 };
     
     const unsigned char* font_data = _binary_kernel_include_drivers_font_bin_start;

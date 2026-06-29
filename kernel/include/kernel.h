@@ -1,6 +1,8 @@
 // kernel/include/kernel.h
 #pragma once
 
+
+extern int pitch_dw;
 // Системные переменные и типы данных
 #include <variable.h>
 
@@ -14,15 +16,11 @@
 #include <drivers/screen.h>
 #include <drivers/keyboard.h>
 #include <drivers/window.h>
-#include <drivers/start_menu.h>
 #include <drivers/font.h>
 
 // Память и диски
 #include <memory/disk.h>
 #include <memory/fs.h>
-
-//===== CPP ФАЙЛЫ =====
-#include<drivers/cpp.h>
 
 static inline void outb(unsigned short port, unsigned char val) {
     __asm__ __volatile__("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -54,3 +52,6 @@ static inline unsigned int inl(unsigned short port) {
 static inline void io_wait(void) {
     __asm__ __volatile__("outb %%al, $0x80" : : "a"(0));
 }
+
+//заметка:
+// hover RGB(45, 165, 255) not hover RGB(0, 120, 212)

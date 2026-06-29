@@ -1,0 +1,9 @@
+# Жесткие пути к прошивкам BIOS в Fedora
+romimage: file=/usr/share/seabios/bios.bin
+vgaromimage: file=/usr/share/seabios/vgabios.bin
+
+boot: disk
+ata0-master: type=disk, path="AnalOS-qemu.img", mode=flat
+megs: 512
+
+display_library: x
