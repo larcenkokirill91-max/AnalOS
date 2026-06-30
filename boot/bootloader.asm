@@ -9,7 +9,6 @@ start:
     mov es, ax
     mov ss, ax
     mov sp, 0x7c00
-
     mov [boot_drive], dl
 
     ; 1. Настройка графики VBE 1280x1024, 32 bit
@@ -21,7 +20,7 @@ start:
     jne video_error
 
     mov ax, 0x4F02
-    mov bx, 0x411B     
+    mov bx, 0x411B
     int 0x10
     cmp ax, 0x004F
     jne video_error
@@ -38,9 +37,8 @@ start:
 
     ; === ЧТЕНИЕ ЯДРА (Безопасные порции для старых BIOS) ===
     ; Изменили порцию: 31 итерация * 32 сектора = 992 сектора (~500 КБ)
-    mov cx, 31          
+    mov cx, 31
     mov bx, 0x1000      ; Стартовый сегмент памяти (0x1000)
-    
     xor bp, bp          ; Старшие 16 бит LBA = 0
     mov si, 1           ; Младшие 16 бит LBA = 1
 
@@ -48,34 +46,34 @@ load_loop:
     push ecx            ; Сохраняем счетчик цикла
 
     ; Строим структуру DAP в стеке
-    push word 0         
-    push word 0         
-    push bp             
-    push si             
-    push bx             
-    push word 0x0000    
+    push word 0
+    push word 0
+    push bp
+    push si
+    push bx
+    push word 0x0000
     push word 32        ; ИСПРАВЛЕНО: 32 сектора — абсолютно безопасный максимум для Intel BIOS
-    push word 0x0010    
+    push word 0x0010
 
     mov ah, 0x42
-    mov dl, [boot_drive] 
-    mov di, sp          
-    push si             
-    mov si, di          
+    mov dl, [boot_drive]
+    mov di, sp
+    push si
+    mov si, di
     int 0x13
-    pop si              
-    jc disk_error       
-
-    add sp, 16          ; Очищаем стек
+    pop si
+    jc disk_error
     
+    add sp, 16          ; Очищаем стек
+
     ; Сдвигаем параметры для следующей порции:
     add si, 32          ; Продвигаем LBA адрес вперед на 32 сектора
-    adc bp, 0           
+    adc bp, 0
     ; ИСПРАВЛЕНО: Сдвигаем сегмент ОЗУ на 32 сектора вперед (16384 байт / 16 = 0x0400)
-    add bx, 0x0400      
+    add bx, 0x0400
 
-    pop ecx             
-    loop load_loop      
+    pop ecx
+    loop load_loop
 
     ; Переход в 32-битный защищенный режим
     cli
@@ -84,7 +82,7 @@ load_loop:
     mov eax, cr0
     or eax, 0x1
     mov cr0, eax
-
+    
     jmp CODE_SEG:init_pm
 
 video_error:
@@ -110,8 +108,8 @@ init_pm:
     
     mov ebp, 0x90000
     mov esp, ebp
-
-    call KERNEL_OFFSET    
+    
+    call KERNEL_OFFSET
     jmp $
 
 align 4

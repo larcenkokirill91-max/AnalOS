@@ -131,24 +131,18 @@ void draw_circle(unsigned char* video_memory, int center_x, int center_y, int ra
 }
 
 extern unsigned int* global_video_memory;
-
+extern int pitch_dw;
+extern unsigned int* back_buffer32;
+static unsigned int static_back_buffer[1280 * 1024];
 void swap_buffers() {
-    uint16_t* dest = (uint16_t*)global_video_memory;
-    uint32_t* src = back_buffer32;
+    unsigned int* dest = global_video_memory;
+    unsigned int* src = back_buffer32;
     if (!dest || !src) return;
-    int vbe_pitch_w16 = 1280; 
-    for (int current_y = 0; current_y < 1024; current_y++) {
-        int v_offset = current_y * vbe_pitch_w16; 
-        int b_offset = current_y * 1280;     
-        for (int current_x = 0; current_x < 1280; current_x++) {
-            uint32_t c32 = src[b_offset + current_x];
-            uint8_t r = (c32 >> 16) & 0xFF;
-            uint8_t g = (c32 >> 8)  & 0xFF;
-            uint8_t b = c32         & 0xFF;
-            uint16_t c16 = ((b & 0xF8) << 8) | ((g & 0xFC) << 3) | (r >> 3);
-            dest[v_offset + current_x] = c16;
-        }
+
+    for (int i = 0; i < 1310720; i++) {
+        dest[i] = src[i];
     }
+
     asm volatile ("outw %0, %1" : : "a"((uint16_t)4), "Nd"((uint16_t)0x01CE));
 }
 

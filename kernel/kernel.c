@@ -137,6 +137,15 @@ void draw_time(unsigned char* back_buffer, unsigned char* video_memory) {
     }
 }
 
+void init_timer(unsigned int frequency) {
+    unsigned int divisor = 1193182 / frequency;
+
+    outb(0x43, 0x36);
+
+    outb(0x40, (unsigned char)(divisor & 0xFF));
+    outb(0x40, (unsigned char)((divisor >> 8) & 0xFF));
+}
+
 #define HEAP_START 0x04000000  
 #define HEAP_SIZE  0x04000000  
 
@@ -229,6 +238,7 @@ void free(void* ptr) {
 
 __attribute__((section(".text.entry")))
 void kernel_main(void) {
+    init_timer(100);
     unsigned int* vbe_info_struct = (unsigned int*)0x7000;
     unsigned int* real_lfb = (unsigned int*)(vbe_info_struct[0x28 / 4]); 
 
@@ -307,37 +317,37 @@ void kernel_main(void) {
         }
         __asm__ __volatile__("sti");
         if (mouse_ready_flag) {
-            for (int y_offset = 0; y_offset < 16; y_offset++) {
-                int current_y = mouse_y + y_offset;
-                if (current_y < 0 || current_y >= 1024) continue;
+            int curr_mouse_x = mouse_x;
+            int curr_mouse_y = mouse_y;
 
-                int row_offset = current_y * 1280; 
+            for (int y_offset = 0; y_offset < 16; y_offset++) {
+                int target_y = curr_mouse_y + y_offset;
+                if (target_y < 0 || target_y >= 1024) continue;
+
+                int row_offset = target_y * 1280;
 
                 for (int x_offset = 0; x_offset < 16; x_offset++) {
-                    int current_x = mouse_x + x_offset;
-                    if (current_x < 0 || current_x >= 1280) continue;
+                    int target_x = curr_mouse_x + x_offset;
+                    if (target_x < 0 || target_x >= 1280) continue;
 
-                    int screen_idx = row_offset + current_x;
+                    int screen_idx = row_offset + target_x;
                     
                     video_memory32[screen_idx] = back_buffer32[screen_idx]; 
                 }
             }
-            signed char move_x = local_packet[1];
-            signed char move_y = local_packet[2];
+
+            signed char move_x = local_packet[1]; 
+            signed char move_y = local_packet[2]; 
             mouse_x += move_x;
             mouse_y -= move_y;
 
-
-            /* Ограничиваем координаты границами экрана 1280x1024 */
             if (mouse_x < 0) mouse_x = 0;
             if (mouse_y < 0) mouse_y = 0;
             if (mouse_x > SCREEN_WIDTH - 16) mouse_x = SCREEN_WIDTH - 16;
             if (mouse_y > SCREEN_HEIGHT - 16) mouse_y = SCREEN_HEIGHT - 16;
 
-            /* Логика клика левой кнопкой мыши */
             unsigned char left_button = (local_packet[0] & 0x01);
             if (left_button == 1) {
-                /* Если кнопка только что нажата и мы ничего не тащим, ищем окно для захвата */
                 if (prev_left_button == 0 && dragged_window_idx == -1 && start_menu_open == 0) {
                     for (int i = 0; i < 3; i++) {
                         if (cpp_get_window_is_visible(i) && 
@@ -353,14 +363,12 @@ void kernel_main(void) {
                             frame_x = cpp_get_window_x(i);
                             frame_y = cpp_get_window_y(i);
                             
-                            /* Рисуем стартовую XOR-рамку прямо на экране */
                             draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(i), cpp_get_window_height(i), pitch_dw);
                             break;
                         }
                     }
                 }
                 
-                /* Если окно уже тащат и мышь сдвинулась — обновляем XOR-рамку */
                 if (dragged_window_idx != -1 && (move_x != 0 || move_y != 0)) {
                     draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(dragged_window_idx), cpp_get_window_height(dragged_window_idx), pitch_dw);
                     frame_x += move_x;
@@ -368,36 +376,25 @@ void kernel_main(void) {
                     draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(dragged_window_idx), cpp_get_window_height(dragged_window_idx), pitch_dw);
                 }
             } else {
-                /* Кнопка отпущена — если тащили окно, фиксируем его новую позицию */
                 if (dragged_window_idx != -1 && is_dragging == 1) {
                     draw_xor_frame(video_memory32, frame_x, frame_y, cpp_get_window_width(dragged_window_idx), cpp_get_window_height(dragged_window_idx), pitch_dw);
                     cpp_set_window_position(dragged_window_idx, frame_x, frame_y);
                     
-                    /* Флаг сбросится, но рендеринг кадра ниже всё равно отработает, так как is_dragging ещё равен 1 */
                 }
             }
             prev_left_button = left_button;
             
-            /* Рисуем курсор мыши на новой позиции поверх старого кадра видеопамяти */
             draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
         }
 
-        // ====================================================================
-        // --- ИЗОЛИРОВАННЫЙ КРИТИЧЕСКИЙ БЛОК ОБНОВЛЕНИЯ ИНТЕРФЕЙСА (РЕНДЕРИНГ) ---
-        // ====================================================================
-        /* ВЫНЕСЕНО ИЗ ELSE: Выполняется всегда, когда система требует перерисовки */
         if (is_dragging == 1 || menu_open == 1) {
             
-            // 1. ПОЛНОСТЬЮ ВЫКЛЮЧАЕМ ПРЕРЫВАНИЯ перед началом формирования кадра
             __asm__ __volatile__("cli");
 
-            // 2. Очищаем задний буфер в синий цвет (базовый рабочий стол)
             render((unsigned char*)back_buffer32, fs);
 
-            // 3. Отрисовываем все видимые C++ окна поверх фона в задний буфер
             cpp_draw_windows((unsigned char*)back_buffer32);
 
-            // 4. ОРИГИНАЛЬНАЯ ОТРИСОВКА ВАШЕГО МЕНЮ (внутри безопасного буфера)
             if (menu_open == 1) {
                 int win0_x = cpp_get_window_x(0);
                 int win0_y = cpp_get_window_y(0);
@@ -409,8 +406,6 @@ void kernel_main(void) {
                 draw_rect((unsigned char*)back_buffer32, current_line_x, current_line_y, 100, 4, 0, 120, 212, 255);
             }
 
-            // cpp_draw_taskbar_widgets((unsigned char*)back_buffer32);
-            //draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
 
             swap_buffers();
 
@@ -424,7 +419,6 @@ void kernel_main(void) {
             draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
         }
 
-        // --- 2. ОБРАБОТКА КЛАВИАТУРЫ ПО СОБЫТИЮ IRQ1 ---
         int kbd_ready_flag = 0;
         unsigned char kbd_data = 0;
 
@@ -488,7 +482,7 @@ void kernel_main(void) {
                     cpp_draw_taskbar_widgets((unsigned char*)back_buffer32);
                     
                     last_m = -1;
-                    draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
+                    // draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
                     
                     swap_buffers();
                     draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
@@ -511,23 +505,23 @@ void kernel_main(void) {
         }
 
         // --- 3. ОБНОВЛЕНИЕ ВРЕМЕНИ ПО ТАЙМЕРУ PIT (IRQ0) ---
-        //__asm__ __volatile__("cli");
+     //   __asm__ __volatile__("cli");
         //if (timer_ticks - last_printed_tick >= 18) {
-        //    last_printed_tick += 18; 
-        //    __asm__ __volatile__("sti"); 
+      //      last_printed_tick += 18; 
+      //      __asm__ __volatile__("sti"); 
 //
-  //          draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
-    //        
+     //       draw_time((unsigned char*)back_buffer32, (unsigned char*)video_memory32);
+      //      
       //      if (mouse_x >= 1180 && mouse_y >= 990) {
-        //        draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
-          //  }
-            //__asm__ __volatile__("cli"); 
-        //}
+      //          draw_cursor((unsigned char*)video_memory32, mouse_x, mouse_y);
+       //     }
+      //      __asm__ __volatile__("cli"); 
+     //   }
 //
-  //      if (!mouse_has_data() && !keyboard_has_data()) {
-    //        __asm__ __volatile__("sti\n\thlt"); 
+     //   if (!mouse_has_data() && !keyboard_has_data()) {
+     //       __asm__ __volatile__("sti\n\thlt"); 
       //  } else {
-        //    __asm__ __volatile__("sti"); 
-        //}
+      //      __asm__ __volatile__("sti"); 
+      //  }
     }
 }
