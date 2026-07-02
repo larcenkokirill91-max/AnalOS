@@ -4,7 +4,7 @@ CXXFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib \
            -fno-exceptions -fno-rtti \
            -Ikernel/include -Ilibc/include -Igui
 
-all: AnalOS.img AnalOS-qemu.img
+all: AnalOS.img
 
 build/boot.bin: boot/bootloader.asm
 	nasm -f bin boot/bootloader.asm -o build/boot.bin
@@ -65,31 +65,17 @@ AnalOS.img: build/boot.bin build/kernel.bin
 	cat build/boot.bin build/kernel.bin > AnalOS.img
 	truncate -s 10485760 AnalOS.img
 
-AnalOS-qemu.img: build/boot_qemu.bin build/kernel.bin
-	cat build/boot_qemu.bin build/kernel.bin > AnalOS-qemu.img
-	truncate -s 10485760 AnalOS-qemu.img
-
-qemu: AnalOS-qemu.img
+qemu: AnalOS.img
 	qemu-system-i386 \
-		-machine type=pc,accel=tcg \
-		-cpu pentium3 \
-		-vga std \
-		-device VGA,vgamem_mb=16 \
+		-cpu Conroe-v1,-lm \
 		-m 512M \
-		-drive file=AnalOS-qemu.img,format=raw,if=ide,index=0,media=disk \
-		-boot c \
-		-d int,cpu_reset -D qemu.log
-
-qemu-debug: AnalOS-qemu.img
-	qemu-system-i386 \
-		-machine type=pc,accel=tcg \
-		-cpu pentium3 \
 		-vga std \
-		-device VGA,vgamem_mb=16 \
-		-m 512M \
-		-drive file=AnalOS-qemu.img,format=raw,if=ide,index=0,media=disk \
+		-drive file=AnalOS.img,format=raw,if=ide,index=0,media=disk \
 		-boot c \
-		-s -S
+		-audiodev pa,id=snd0 \
+		-machine pcspk-audiodev=snd0 \
+		-d int \
+		-D qemu.log
 
 clean:
 	rm -rf build/*.o build/*.bin AnalOS.img AnalOS-qemu.img

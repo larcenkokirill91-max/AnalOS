@@ -57,7 +57,13 @@ void render(unsigned char* video_memory, struct superblock* fs) {
     draw_rect(video_memory, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 255, 255);
     draw_rect((unsigned char*)back_buffer32, 0, 966, 1280, 58, 238, 238, 238, 255);
 }
-
+void init_pit_channel0(void) {
+    uint32_t divisor = 1193182 / 100; 
+    
+    outb(0x43, 0x36);
+    outb(0x40, (uint8_t)(divisor & 0xFF));
+    outb(0x40, (uint8_t)((divisor >> 8) & 0xFF));
+}
 void sys_shutdown() {
     outl(0xCF8, 0x8000F840);
     io_wait();
@@ -137,13 +143,13 @@ void draw_time(unsigned char* back_buffer, unsigned char* video_memory) {
     }
 }
 
-void init_timer(unsigned int frequency) {
-    unsigned int divisor = 1193182 / frequency;
-
+void init_pit_system_timer(void) {
+    // 1193182 / 100 Гц = 11931 (0x2E9B)
+    uint32_t divisor = 1193182 / 100; 
+    
     outb(0x43, 0x36);
-
-    outb(0x40, (unsigned char)(divisor & 0xFF));
-    outb(0x40, (unsigned char)((divisor >> 8) & 0xFF));
+    outb(0x40, (uint8_t)(divisor & 0xFF));
+    outb(0x40, (uint8_t)((divisor >> 8) & 0xFF));
 }
 
 #define HEAP_START 0x04000000  
@@ -238,7 +244,9 @@ void free(void* ptr) {
 
 __attribute__((section(".text.entry")))
 void kernel_main(void) {
-    init_timer(100);
+    heap_init();
+    back_buffer32 = (unsigned int*)malloc(1280 * 1024 * sizeof(unsigned int));
+    init_pit_channel0();
     unsigned int* vbe_info_struct = (unsigned int*)0x7000;
     unsigned int* real_lfb = (unsigned int*)(vbe_info_struct[0x28 / 4]); 
 
@@ -265,17 +273,15 @@ void kernel_main(void) {
     int frame_x = 0;
     int frame_y = 0;
     
-    render((unsigned char*)back_buffer32, fs);
-
     unsigned char selected_option = 0;
     static unsigned char prev_left_button = 0;
     static unsigned int last_printed_tick = 0;
+    init_pit_channel0(); 
 
     mouse_init();
     idt_init();
-    heap_init();
     
-    back_buffer32 = (unsigned int*)malloc(1280 * 1024 * sizeof(unsigned int));
+    render((unsigned char*)back_buffer32, fs);
     
     if (!back_buffer32) {
         back_buffer32 = (unsigned int*)0x02000000;
@@ -389,7 +395,6 @@ void kernel_main(void) {
 
         if (is_dragging == 1 || menu_open == 1) {
             
-            __asm__ __volatile__("cli");
 
             render((unsigned char*)back_buffer32, fs);
 
@@ -409,7 +414,6 @@ void kernel_main(void) {
 
             swap_buffers();
 
-            __asm__ __volatile__("sti");
 
             if (prev_left_button == 0 && is_dragging == 1) {
                 is_dragging = 0;
@@ -439,7 +443,7 @@ void kernel_main(void) {
                 alt_pressed = 0;
             }
 
-            if (kbd_data == 62 && alt_pressed == 1 && menu_open == 0) {
+            if (kbd_data == 57 && menu_open == 0) {
                 menu_open = 1;
                 selected_option = 0;
                 cpp_set_window_visible(0, 1);

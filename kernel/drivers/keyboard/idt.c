@@ -1,6 +1,5 @@
 #include <kernel.h>
-
-volatile unsigned int timer_ticks = 0; 
+__attribute__((aligned(4096))) volatile unsigned int timer_ticks = 0; 
 unsigned char current_scancode = 0;
 
 signed char mouse_packet[3];
@@ -92,8 +91,8 @@ void pic_remap(void) {
     outb(0x21, 0x01); io_wait();
     outb(0xA1, 0x01); io_wait();
     
-    outb(0x21, 0xF8);
-    outb(0xA1, 0xEF);
+    outb(0x21, 0xFC);
+    outb(0xA1, 0xFF);
 }
 
 void mouse_wait_command(void) {

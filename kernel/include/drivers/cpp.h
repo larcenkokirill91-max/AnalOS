@@ -1,15 +1,15 @@
 #pragma once
-#ifndef CPP
-#define CPP
-#include "../../../gui/gui.hpp"
-void cpp_init_windows();
-void cpp_draw_windows(unsigned char* video_memory);
-void cpp_draw_single_window(unsigned char* video_memory, int idx);
-void cpp_set_window_visible(int idx, int visible);
-int cpp_get_window_is_visible(int idx);
-void cpp_set_window_position(int idx, int new_x, int new_y);
-int cpp_get_window_x(int idx);
-int cpp_get_window_y(int idx);
-int cpp_get_window_width(int idx);
-int cpp_get_window_height(int idx);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Сообщаем C++ компилятору, что функции malloc и heap_init 
+// реализованы в Си-файлах ядра и их можно использовать
+void heap_init(void);
+void* malloc(unsigned int size);
+void free(void* ptr);
+
+#ifdef __cplusplus
+}
 #endif

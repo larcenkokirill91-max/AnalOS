@@ -57,6 +57,7 @@ timer_asm_handler:
     mov es, ax
     call timer_handler_c
     popad
+    sti
     iretd
 
 keyboard_asm_handler:

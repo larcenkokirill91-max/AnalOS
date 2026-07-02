@@ -19,10 +19,14 @@ void get_rtc_time(int* years, int* mounth, int* days, int* hours, int* minutes, 
 	*mounth   = (bcd_mth & 0x0F) + ((bcd_mth >> 4) * 10);
 	*years   = (bcd_yer & 0x0F) + ((bcd_yer >> 4) * 10);
 }
+
 void timer_wait(int ticks) {
-    unsigned int eticks;
-    eticks = timer_ticks + ticks;
-    while(timer_ticks < eticks) {
+    volatile unsigned int eticks = timer_ticks + ticks;
+    
+    while (timer_ticks < eticks) {
+        __asm__ volatile("sti");
         __asm__ volatile("hlt");
+        
+        __asm__ __volatile__("" : : : "memory");
     }
 }
