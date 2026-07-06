@@ -1,0 +1,81 @@
+CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mpreferred-stack-boundary=2 -fno-tree-vectorize -mno-sse -mno-mmx -mno-80387 -Ikernel32/include -Ilibc/include
+CXXFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib \
+           -mpreferred-stack-boundary=2 -fno-tree-vectorize -mno-sse -mno-mmx -mno-80387 \
+           -fno-exceptions -fno-rtti \
+           -Ikernel32/include -Ilibc/include -Igui
+
+all: AnalOS32.img
+
+build32/boot.bin: boot/bootloader.asm
+	nasm -f bin boot/bootloader.asm -o build32/boot.bin
+
+build32/boot_qemu.bin: boot/boot.asm
+	nasm -f bin boot/boot.asm -o build32/boot_qemu.bin
+
+build32/kernel_entry.o: boot/kernel_entry.asm
+	nasm -f elf32 boot/kernel_entry.asm -o build32/kernel_entry.o
+
+build32/kernel32.o: kernel32/kernel.c
+	gcc $(CFLAGS) -c kernel32/kernel.c -o build32/kernel32.o
+
+build32/screen.o: kernel32/drivers/screen/screen.c
+	gcc $(CFLAGS) -c kernel32/drivers/screen/screen.c -o build32/screen.o
+
+build32/font.o: kernel32/include/drivers/font.bin
+	objcopy -I binary -O elf32-i386 -B i386 --rename-section .data=.rodata,alloc,load,readonly,data kernel32/include/drivers/font.bin build32/font.o
+
+build32/keyboard.o: kernel32/drivers/keyboard/keyboard.c
+	gcc $(CFLAGS) -c kernel32/drivers/keyboard/keyboard.c -o build32/keyboard.o
+
+build32/idt.o: kernel32/drivers/keyboard/idt.c
+	gcc $(CFLAGS) -mno-sse -mno-mmx -mno-80387 -c kernel32/drivers/keyboard/idt.c -o build32/idt.o
+
+build32/disk.o: kernel32/drivers/disk/disk.c
+	gcc $(CFLAGS) -c kernel32/drivers/disk/disk.c -o build32/disk.o
+
+build32/fs.o: kernel32/drivers/disk/fs.c
+	gcc $(CFLAGS) -c kernel32/drivers/disk/fs.c -o build32/fs.o
+
+build32/lib.o: libc/lib.c
+	gcc $(CFLAGS) -c libc/lib.c -o build32/lib.o
+
+build32/math.o: libc/math.c
+	gcc $(CFLAGS) -c libc/math.c -o build32/math.o
+
+build32/time.o: libc/time.c
+	gcc $(CFLAGS) -c libc/time.c -o build32/time.o
+	
+build32/gui_bridge.o: gui/gui_bridge.cpp
+	g++ $(CXXFLAGS) -c gui/gui_bridge.cpp -o build32/gui_bridge.o
+
+build32/window.o: gui/window.cpp
+	g++ $(CXXFLAGS) -c gui/window.cpp -o build32/window.o
+
+build32/start_menu.o: gui/start_menu.cpp
+	g++ $(CXXFLAGS) -c gui/start_menu.cpp -o build32/start_menu.o
+
+OBJ = build32/kernel_entry.o build32/kernel32.o build32/screen.o build32/font.o build32/window.o \
+      build32/start_menu.o build32/keyboard.o build32/idt.o build32/disk.o build32/fs.o \
+      build32/lib.o build32/math.o build32/time.o build32/gui_bridge.o
+
+build32/kernel.bin: $(OBJ) boot/linker.ld
+	ld -m elf_i386 --oformat binary -T boot/linker.ld -o build32/kernel.bin $(OBJ)
+
+AnalOS32.img: build32/boot.bin build32/kernel.bin
+	cat build32/boot.bin build32/kernel.bin > AnalOS32.img
+	truncate -s 10485760 AnalOS32.img
+
+qemu: AnalOS32.img
+	qemu-system-i386 \
+		-cpu Conroe-v1,-lm \
+		-m 512M \
+		-vga std \
+		-drive file=AnalOS32.img,format=raw,if=ide,index=0,media=disk \
+		-boot c \
+		-audiodev pa,id=snd0 \
+		-machine pcspk-audiodev=snd0 \
+		-d int \
+		-D qemu.log
+
+clean:
+	rm -rf build32/*.o build32/*.bin AnalOS32.img AnalOS32-qemu.img

@@ -1,3 +1,0 @@
-make clean && make
-sudo wipefs --all --force /dev/sdb
-sudo dd if=AnalOS.img of=/dev/sdb bs=4M status=progress && sync
