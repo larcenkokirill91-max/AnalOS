@@ -1,12 +1,25 @@
 #include "efi.h"
 
+typedef struct {
+    unsigned int* framebuffer;
+    unsigned int width;
+    unsigned int height;
+} BootInfo;
+
+static UINT32* real_framebuffer = 0;
+
 static EFI_GRAPHICS_OUTPUT_BLT_PIXEL virtual_framebuffer[1024 * 768];
 
+void init_screen_driver(BootInfo* info) {
+    if (info) {
+        real_framebuffer = (UINT32*)info->framebuffer;
+    }
+}
+
 EFIAPI void draw_pixel(UINT32 x, UINT32 y, UINT8 r, UINT8 g, UINT8 b, UINT8 alpha) {
-    if (x >= 1024 || y >= 768) return;
+    if (x >= 1024 || y >= 768 || alpha == 0) return;
 
     UINT32 index = y * 1024 + x;
-    if (alpha == 0) return;
     if (alpha == 255) {
         virtual_framebuffer[index].Red = r;
         virtual_framebuffer[index].Green = g;
@@ -31,7 +44,7 @@ EFIAPI void draw_rect(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT8 r, UINT8 g, 
     for (UINT32 i = 0; i < h; i++) {
         for (UINT32 j = 0; j < w; j++) {
             UINT32 index = (y + i) * 1024 + (x + j);
-            
+
             if (alpha == 255) {
                 virtual_framebuffer[index].Red   = r;
                 virtual_framebuffer[index].Green = g;
@@ -105,7 +118,7 @@ EFIAPI void draw_circle(UINT32 center_x, UINT32 center_y, UINT32 rad, UINT8 r, U
         for (UINT32 cur_x = start_x_bound; cur_x <= end_x_bound; cur_x++) {
             UINT32 dx = (cur_x > center_x) ? (cur_x - center_x) : (center_x - cur_x);
             UINT32 dx_scaled = dx * 256;
-            
+
             UINT32 dist_sq = (dx_scaled * dx_scaled) + dy_sq;
 
             if (dist_sq <= rad_sq_scaled) {
@@ -121,9 +134,9 @@ EFIAPI void draw_circle(UINT32 center_x, UINT32 center_y, UINT32 rad, UINT8 r, U
                 } else {
                     UINT32 edge_dist = dist - inner_edge;
                     UINT32 alpha_factor = 256 - edge_dist;
-                    
+
                     UINT32 final_alpha = (a * alpha_factor) >> 8;
-                    
+
                     if (final_alpha > 0) {
                         draw_pixel(cur_x, cur_y, r, g, b, (UINT8)final_alpha);
                     }
@@ -135,7 +148,7 @@ EFIAPI void draw_circle(UINT32 center_x, UINT32 center_y, UINT32 rad, UINT8 r, U
 
 EFIAPI void draw_taskbar(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT32 rad, UINT8 r, UINT8 g, UINT8 b, UINT8 a) {
     if (w == 0 || h == 0 || a == 0) return;
-    
+
     if (rad * 2 > w) rad = w / 2;
     if (rad * 2 > h) rad = h / 2;
 
@@ -145,9 +158,7 @@ EFIAPI void draw_taskbar(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT32 rad, UIN
     }
 
     draw_rect(x + rad, y, w - (rad * 2), rad, r, g, b, a);
-    
     draw_rect(x + rad, y + rad, w - (rad * 2), h - (rad * 2), r, g, b, a);
-    
     draw_rect(x + rad, y + h - rad, w - (rad * 2), rad, r, g, b, a);
     draw_rect(x, y + rad, rad, h - (rad * 2), r, g, b, a);
     draw_rect((x + w) - rad, y + rad, rad, h - (rad * 2), r, g, b, a);
@@ -156,16 +167,16 @@ EFIAPI void draw_taskbar(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT32 rad, UIN
     UINT32 rad_sq_scaled = rad_scaled * rad_scaled;
     UINT32 inner_edge = rad_scaled - 256;
 
-    struct Corner { 
-        UINT32 cx; 
-        UINT32 cy; 
-        int dx_sign; 
-        int dy_sign; 
+    struct Corner {
+        UINT32 cx;
+        UINT32 cy;
+        int dx_sign;
+        int dy_sign;
     } corners[4] = {
-        { x + rad - 1,     y + rad - 1,     -1, -1 }, // Топ-левый
-        { x + w - rad,     y + rad - 1,      1, -1 }, // Топ-правый
-        { x + rad - 1,     y + h - rad,     -1,  1 }, // Бот-левый
-        { x + w - rad,     y + h - rad,      1,  1 }  // Бот-правый
+        { x + rad - 1,     y + rad - 1,     -1, -1 },
+        { x + w - rad,     y + rad - 1,      1, -1 },
+        { x + rad - 1,     y + h - rad,     -1,  1 },
+        { x + w - rad,     y + h - rad,      1,  1 }
     };
 
     for (int i = 0; i < 4; i++) {
@@ -206,6 +217,16 @@ EFIAPI void draw_taskbar(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT32 rad, UIN
 }
 
 EFIAPI void swap_buffers(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop) {
-    if (!gop || !gop->Blt) return;
-    gop->Blt(gop, virtual_framebuffer, EfiBltBufferToVideo, 0, 0, 0, 0, 1024, 768, 0);
+    (void)gop;
+    if (!real_framebuffer) return;
+
+    UINT32* src = (UINT32*)virtual_framebuffer;
+    for (UINT32 i = 0; i < 1024 * 768; i++) {
+        UINT32 color = src[i];
+        UINT8 r = (color >> 16) & 0xFF;
+        UINT8 g = (color >> 8) & 0xFF;
+        UINT8 b = color & 0xFF;
+
+        real_framebuffer[i] = (r << 16) | (g << 8) | b;
+    }
 }

@@ -9,7 +9,8 @@ LDFLAGS = -Wl,--subsystem,10 \
           -Wl,--dll \
           -s
 
-SRCS = system/kernel/kernel.c boot/gop.c system/drivers/screen.c
+# Теперь компилируем bootloader.c (вместо gop.c) вместе с ядром и драйверами экрана
+SRCS = boot/bootloader.c system/kernel/kernel.c system/drivers/screen.c
 
 all: build
 
