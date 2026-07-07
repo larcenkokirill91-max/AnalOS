@@ -7,7 +7,6 @@
 #include <kernel.h>
 #include <stdint.h>
 
-// 1. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ЯДРА
 unsigned int screen_pitch = 5120;
 int global_pitch_dw = 1280;
 unsigned int* global_video_memory = 0;
@@ -107,25 +106,23 @@ void draw_time(unsigned char* back_buffer, unsigned char* video_memory) {
 
         draw_rect(back_buffer, 1100, 966, 152, 58, 238, 238, 238, 255); 
 
-        // СТРОКА 1: ВРЕМЯ (Y 979)
         int time_x = 1150; 
 
         draw_char(back_buffer, fh + 16, time_x,      979, 0, 0, 0); 
         draw_char(back_buffer, lh + 16, time_x + 8,  979, 0, 0, 0); 
-        draw_char(back_buffer, 26,      time_x + 14, 979, 0, 0, 0); // Двоеточие
+        draw_char(back_buffer, 26,      time_x + 14, 979, 0, 0, 0);
         draw_char(back_buffer, fm + 16, time_x + 18, 979, 0, 0, 0); 
         draw_char(back_buffer, lm + 16, time_x + 26, 979, 0, 0, 0); 
 
-        // СТРОКА 2: ДАТА (Y 1001)
         int date_x = 1130; 
 
         draw_char(back_buffer, fd + 16,   date_x,      1001, 0, 0, 0);
         draw_char(back_buffer, ld + 16,   date_x + 8,  1001, 0, 0, 0);
-        draw_char(back_buffer, 14,        date_x + 14, 1004, 0, 0, 0); // Точка
+        draw_char(back_buffer, 14,        date_x + 14, 1004, 0, 0, 0);
         
         draw_char(back_buffer, fmth + 16, date_x + 22, 1001, 0, 0, 0);
         draw_char(back_buffer, lmth + 16, date_x + 30, 1001, 0, 0, 0);
-        draw_char(back_buffer, 14,        date_x + 36, 1004, 0, 0, 0); // Точка
+        draw_char(back_buffer, 14,        date_x + 36, 1004, 0, 0, 0);
         
         draw_char(back_buffer, y1 + 16,   date_x + 44, 1001, 0, 0, 0);
         draw_char(back_buffer, y2 + 16,   date_x + 52, 1001, 0, 0, 0);
@@ -144,7 +141,6 @@ void draw_time(unsigned char* back_buffer, unsigned char* video_memory) {
 }
 
 void init_pit_system_timer(void) {
-    // 1193182 / 100 Гц = 11931 (0x2E9B)
     uint32_t divisor = 1193182 / 100; 
     
     outb(0x43, 0x36);
@@ -307,9 +303,6 @@ void kernel_main(void) {
     beep();
 
     while(1) {
-                // ====================================================================
-        // --- 1. ОБРАБОТКА МЫШИ ПО СОБЫТИЮ IRQ12 ---
-        // ====================================================================
         int mouse_ready_flag = 0;
         signed char local_packet[3];
 

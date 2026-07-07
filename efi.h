@@ -109,17 +109,14 @@ typedef struct {
     EFI_BOOT_SERVICES *BootServices;
 } EFI_SYSTEM_TABLE;
 
-// Чистые прототипы функций
 EFIAPI EFI_GRAPHICS_OUTPUT_PROTOCOL* init_gop(EFI_SYSTEM_TABLE *SystemTable);
 EFIAPI void fill_screen(UINT8 r, UINT8 g, UINT8 b);
 EFIAPI void draw_square(UINT32 size, UINT8 r, UINT8 g, UINT8 b);
-EFIAPI void draw_pixel(UINT32 x, UINT32 y, UINT8 r, UINT8 g, UINT8 b);
 EFIAPI void draw_rect(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT8 r, UINT8 g, UINT8 b);
 EFIAPI void draw_ui_element(UINT32 w, UINT32 h, int anchor, UINT8 r, UINT8 g, UINT8 b);
 EFIAPI void swap_buffers(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop);
-
-// Новые альфа-функции
-EFIAPI void draw_pixel_alpha(UINT32 x, UINT32 y, UINT8 r, UINT8 g, UINT8 b, UINT8 alpha);
+EFIAPI void draw_pixel(UINT32 x, UINT32 y, UINT8 r, UINT8 g, UINT8 b, UINT8 alpha);
 EFIAPI void draw_alpha_test_bar(UINT32 start_x, UINT32 start_y, UINT32 height);
+EFIAPI void draw_circle(UINT32 center_x, UINT32 center_y, UINT32 rad, UINT8 r, UINT8 g, UINT8 b, UINT8 a);
 
 #endif

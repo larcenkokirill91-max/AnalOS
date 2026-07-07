@@ -1,7 +1,6 @@
 #include "gui.hpp"
 #include "window.hpp"
 
-// Возвращаем ваши исходные статические объекты
 static Window win[3] = {
     Window(0, 0, 0, 0, false),
     Window(0, 0, 0, 0, false),

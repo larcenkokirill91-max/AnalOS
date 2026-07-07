@@ -52,6 +52,3 @@ static inline unsigned int inl(unsigned short port) {
 static inline void io_wait(void) {
     __asm__ __volatile__("outb %%al, $0x80" : : "a"(0));
 }
-
-//заметка:
-// hover RGB(45, 165, 255) not hover RGB(0, 120, 212)

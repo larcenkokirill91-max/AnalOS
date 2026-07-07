@@ -12,7 +12,7 @@ def unpack_bin_to_c_source(input_file, output_file):
     with open(input_path, 'rb') as f:
         data = f.read()
 
-    glyph_size = 12 * 6  # 72 байта на один символ
+    glyph_size = 12 * 6
     total_glyphs = len(data) // glyph_size
 
     out_lines = [
@@ -31,10 +31,8 @@ def unpack_bin_to_c_source(input_file, output_file):
         
         for row in range(12):
             row_bytes = glyph_bytes[row*6 : (row+1)*6]
-            # Форматируем строку из 6 чисел
             bytes_str = ", ".join(str(b) for b in row_bytes)
             
-            # Строим визуальный комментарий: 0 -> '.', любое другое число -> 'X'
             comment = "".join('.' if b == 0 else 'X' for b in row_bytes)
             
             comma = "," if row < 11 else ""
