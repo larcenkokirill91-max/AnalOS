@@ -1,23 +1,21 @@
 #include "efi.h"
-
-typedef struct {
-    unsigned int* framebuffer;
-    unsigned int width;
-    unsigned int height;
-} BootInfo;
+#include "../include/kernel.h"
 
 static UINT32* real_framebuffer = 0;
 
-static EFI_GRAPHICS_OUTPUT_BLT_PIXEL virtual_framebuffer[1024 * 768];
+// Массив удален! Вместо него используем чистый указатель
+static EFI_GRAPHICS_OUTPUT_BLT_PIXEL* virtual_framebuffer = 0;
 
 void init_screen_driver(BootInfo* info) {
     if (info) {
-        real_framebuffer = (UINT32*)info->framebuffer;
+        real_framebuffer = (UINT32*)info->FrameBufferBase;
+        // Направляем наш скрытый буфер на безопасный кусок оперативной памяти
+        virtual_framebuffer = (EFI_GRAPHICS_OUTPUT_BLT_PIXEL*)info->VirtualFrameBuffer;
     }
 }
 
 EFIAPI void draw_pixel(UINT32 x, UINT32 y, UINT8 r, UINT8 g, UINT8 b, UINT8 alpha) {
-    if (x >= 1024 || y >= 768 || alpha == 0) return;
+    if (!virtual_framebuffer || x >= 1024 || y >= 768 || alpha == 0) return;
 
     UINT32 index = y * 1024 + x;
     if (alpha == 255) {
@@ -37,7 +35,7 @@ EFIAPI void draw_pixel(UINT32 x, UINT32 y, UINT8 r, UINT8 g, UINT8 b, UINT8 alph
 }
 
 EFIAPI void draw_rect(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT8 r, UINT8 g, UINT8 b, UINT8 alpha) {
-    if (x >= 1024 || y >= 768 || w == 0 || h == 0 || alpha == 0) return;
+    if (!virtual_framebuffer || x >= 1024 || y >= 768 || w == 0 || h == 0 || alpha == 0) return;
     if (x + w > 1024) w = 1024 - x;
     if (y + h > 768) h = 768 - y;
 
@@ -218,7 +216,7 @@ EFIAPI void draw_taskbar(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT32 rad, UIN
 
 EFIAPI void swap_buffers(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop) {
     (void)gop;
-    if (!real_framebuffer) return;
+    if (!real_framebuffer || !virtual_framebuffer) return;
 
     UINT32* src = (UINT32*)virtual_framebuffer;
     for (UINT32 i = 0; i < 1024 * 768; i++) {

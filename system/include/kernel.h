@@ -1,13 +1,10 @@
 #pragma once
 #include <stdint.h>
+#include "../../efi.h"
 
-typedef struct {
-    void* FrameBufferBase;
-    uint64_t FrameBufferSize;
-    uint32_t HorizontalResolution;
-    uint32_t VerticalResolution;
-    uint32_t PixelsPerScanLine;
-} BootInfo;
+extern volatile int has_keyboard_event;
+extern volatile int has_mouse_event;
+extern volatile uint8_t last_scancode;
 
 #include "idt.h"
 #include "keyboard.h"

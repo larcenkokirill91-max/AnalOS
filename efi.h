@@ -50,17 +50,17 @@ typedef struct {
 } EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE;
 
 typedef struct _EFI_GRAPHICS_OUTPUT_PROTOCOL {
-    long long (__attribute__((ms_abi)) *QueryMode)(
+    long long (EFIAPI *QueryMode)(
         struct _EFI_GRAPHICS_OUTPUT_PROTOCOL *This,
         UINT32 ModeNumber,
         UINTN *SizeOfInfo,
         EFI_GRAPHICS_OUTPUT_MODE_INFORMATION **Info
     );
-    long long (__attribute__((ms_abi)) *SetMode)(
+    long long (EFIAPI *SetMode)(
         struct _EFI_GRAPHICS_OUTPUT_PROTOCOL *This,
         UINT32 ModeNumber
     );
-    long long (__attribute__((ms_abi)) *Blt)(
+    long long (EFIAPI *Blt)(
         struct _EFI_GRAPHICS_OUTPUT_PROTOCOL *This,
         EFI_GRAPHICS_OUTPUT_BLT_PIXEL *BltBuffer,
         EFI_GRAPHICS_OUTPUT_BLT_OPERATION BltOperation,
@@ -83,19 +83,22 @@ typedef struct {
 typedef struct {
     EFI_TABLE_HEADER Hdr;
     void* RaiseTPL; void* RestoreTPL;
-    void* AllocatePages; void* FreePages; void* GetMemoryMap;
+    long long (EFIAPI *AllocatePages)(int Type, int MemoryType, UINTN Pages, unsigned long long *Memory);
+    void* FreePages;
+    long long (EFIAPI *GetMemoryMap)(UINTN *MemoryMapSize, void *MemoryMap, UINTN *MapKey, UINTN *DescriptorSize, UINT32 *DescriptorVersion);
     void* AllocatePool; void* FreePool;
     void* CalculateCrc32;
     void* CreateEvent; void* SetTimer; void* WaitForEvent; void* SignalEvent; void* CloseEvent; void* CheckEvent;
     void* InstallProtocolInterface; void* ReinstallProtocolInterface; void* UninstallProtocolInterface; void* HandleProtocol;
     void* VoidReserved; void* RegisterProtocolNotify;
     void* LocateHandle; void* LocateDevicePath; void* InstallConfigurationTable;
-    void* LoadImage; void* StartImage; void* Exit; void* UnloadImage; void* ExitBootServices;
+    void* LoadImage; void* StartImage; void* Exit; void* UnloadImage;
+    long long (EFIAPI *ExitBootServices)(EFI_HANDLE ImageHandle, UINTN MapKey);
     void* GetNextMonotonicCount; void* Stall; void* SetWatchdogTimer;
     void* ConnectController; void* DisconnectController;
     void* OpenProtocol; void* CloseProtocol; void* ProtocolPerHandle;
     void* LocateHandleBuffer;
-    long long (__attribute__((ms_abi)) *LocateProtocol)(EFI_GUID *Protocol, void *Registration, void **Interface);
+    long long (EFIAPI *LocateProtocol)(EFI_GUID *Protocol, void *Registration, void **Interface);
 } EFI_BOOT_SERVICES;
 
 typedef struct {
@@ -108,6 +111,15 @@ typedef struct {
     void* RuntimeServices;
     EFI_BOOT_SERVICES *BootServices;
 } EFI_SYSTEM_TABLE;
+
+typedef struct {
+    void* FrameBufferBase;
+    unsigned long long FrameBufferSize;
+    unsigned int HorizontalResolution;
+    unsigned int VerticalResolution;
+    unsigned int PixelsPerScanLine;
+    void* VirtualFrameBuffer; // <-- НАШЕ НОВОЕ ПОЛЕ
+} BootInfo;
 
 EFIAPI EFI_GRAPHICS_OUTPUT_PROTOCOL* init_gop(EFI_SYSTEM_TABLE *SystemTable);
 EFIAPI void fill_screen(UINT8 r, UINT8 g, UINT8 b, UINT8 a);

@@ -1,6 +1,13 @@
 #include <stdint.h>
 #include "../include/mouse.h"
 
+// Глобальные переменные для сборки пакета данных от мыши
+int mouse_cycle = 0;
+uint8_t mouse_bytes[3]; // Массив строго на 3 байта
+
+// Связываем флаг события мыши с главным циклом ядра в kernel.c
+extern volatile int has_mouse_event;
+
 static inline uint8_t inb(uint16_t port) {
     uint8_t data;
     __asm__ volatile("inb %1, %0" : "=a"(data) : "Nd"(port));
@@ -59,8 +66,22 @@ void init_mouse() {
 void mouse_handler_c() {
     uint8_t data = inb(0x60);
 
-    *(volatile uint32_t*)(0xFEE000B0) = 0;
-}
+    // Записываем пришедший байт в наш буфер пакета
+    mouse_bytes[mouse_cycle] = data;
+    mouse_cycle++;
 
-void init_ioapic(void) {
+    // Мышь PS/2 присылает данные пакетами строго по 3 байта
+    if (mouse_cycle == 3) {
+        mouse_cycle = 0; // Сбрасываем счетчик для следующего движения
+
+        // Сигнализируем главному циклу ядра в kernel.c, что пакет мыши собран!
+        has_mouse_event = 1;
+    }
+
+    // Сброс для старого контроллера прерываний PIC (Slave PIC, так как мышь на IRQ12)
+    outb(0xA0, 0x20);
+    outb(0x20, 0x20);
+
+    // Сброс для локального APIC процессора
+    // *(volatile uint32_t*)(0xFEE000B0) = 0;
 }

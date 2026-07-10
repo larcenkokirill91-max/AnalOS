@@ -6,5 +6,5 @@ struct IDTPointer {
     uint16_t limit;
     uint64_t base;
 } __attribute__((packed));
-extern void init_ioapic(void);
+void init_ioapic(void);
 void init_idt(void);

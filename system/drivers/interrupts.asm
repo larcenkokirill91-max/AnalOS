@@ -4,8 +4,7 @@ global keyboard_handler_asm
 extern keyboard_handler_c
 
 keyboard_handler_asm:
-    push 0
-
+    ; Сохраняем все регистры общего назначения
     push rax
     push rbx
     push rcx
@@ -22,7 +21,15 @@ keyboard_handler_asm:
     push r14
     push r15
 
+    ; Выравнивание стека по границе 16 байт и выделение Shadow Space (32 байта) под MS ABI
+    mov rbp, rsp
+    sub rsp, 40         ; 32 байта под shadow space + 8 байт для гарантии выравнивания
+    and rsp, ~0xF       ; Жестко выравниваем указатель стека RSP
+
     call keyboard_handler_c
+
+    ; Восстанавливаем оригинальное состояние стека перед извлечением регистров
+    mov rsp, rbp
 
     pop r15
     pop r14
@@ -39,16 +46,12 @@ keyboard_handler_asm:
     pop rcx
     pop rbx
     pop rax
-
-    add rsp, 8
     iretq
 
 global mouse_handler_asm
 extern mouse_handler_c
 
 mouse_handler_asm:
-    push 0
-
     push rax
     push rbx
     push rcx
@@ -65,7 +68,13 @@ mouse_handler_asm:
     push r14
     push r15
 
+    mov rbp, rsp
+    sub rsp, 40
+    and rsp, ~0xF
+
     call mouse_handler_c
+
+    mov rsp, rbp
 
     pop r15
     pop r14
@@ -82,8 +91,6 @@ mouse_handler_asm:
     pop rcx
     pop rbx
     pop rax
-
-    add rsp, 8
     iretq
 
 global dummy_handler_asm

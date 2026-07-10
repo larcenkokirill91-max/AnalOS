@@ -15,7 +15,7 @@ LDFLAGS = -Wl,--subsystem,10 \
           -Wl,--dll \
           -s
 
-# Все исходные файлы на C (Включили mouse.c)
+# Все исходные файлы на C
 C_SRCS = boot/bootloader.c \
          system/kernel/kernel.c \
          system/drivers/screen.c \
@@ -26,21 +26,19 @@ C_SRCS = boot/bootloader.c \
 # Все исходные файлы на Ассемблере
 ASM_SRCS = system/drivers/interrupts.asm
 
-# Магия: берем только имена файлов (без старых папок) и переселяем их в папку build/
+# Магия: переселяем файлы в папку build/
 C_OBJS = $(addprefix build/, $(notdir $(C_SRCS:.c=.o)))
 ASM_OBJS = $(addprefix build/, $(notdir $(ASM_SRCS:.asm=.o)))
 OBJS = $(C_OBJS) $(ASM_OBJS)
 
 all: build
 
-# Правило для сборки EFI из всех объектных файлов
-build: $(OBJS)
+build: | build_dir $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o BOOTX64.EFI $(OBJS)
 	mkdir -p image/EFI/BOOT
 	cp BOOTX64.EFI image/EFI/BOOT/BOOTX64.EFI
 	echo "FS0:\\EFI\\BOOT\\BOOTX64.EFI" > image/startup.nsh
 
-# Правила для компиляции файлов .c в папку build/
 build/bootloader.o: boot/bootloader.c | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -63,11 +61,13 @@ build/mouse.o: system/drivers/mouse.c | build_dir
 build/interrupts.o: system/drivers/interrupts.asm | build_dir
 	$(ASM) $(ASMFLAGS) $< -o $@
 
-# Вспомогательное правило, гарантирующее, что папка build существует перед компиляцией
+# Вспомогательное правило: создает папку СТРОГО до того, как начнется любая компиляция
 build_dir:
 	mkdir -p build
 
-run: build
+run:
+	$(MAKE) clean
+	$(MAKE) build
 	qemu-system-x86_64 \
 		-bios ./OVMF.fd \
 		-net none \
@@ -84,6 +84,8 @@ run: build
 		-D qemu.log
 
 clean:
-	rm -rf BOOTX64.EFI image build
+	rm -f BOOTX64.EFI
+	rm -rf image
+	rm -rf build
 
 .PHONY: all build run clean build_dir
