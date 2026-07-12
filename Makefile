@@ -1,22 +1,91 @@
-TARGET = app
+# Компиляторы и утилиты
+CC = x86_64-w64-mingw32-gcc
+ASM = nasm
 
-CXX = g++
-CXXFLAGS = -O3 -Wall -Wextra
+# Флаги компиляции
+CFLAGS = -ffreestanding -nostdlib -mno-red-zone -fno-builtin -Wall -O2 \
+         -I. \
+         -Isystem/include
 
-LDFLAGS = -lsfml-graphics -lsfml-window -lsfml-system
+ASMFLAGS = -f elf64
 
-SRCS = main.cpp
-HEADERS = vector_editor.cpp
+# Флаги линковщика (собираем EFI-приложение)
+LDFLAGS = -Wl,--subsystem,10 \
+          -Wl,-entry,efi_main \
+          -Wl,--dll \
+          -s
 
-all: $(TARGET)
+# Все исходные файлы на C
+C_SRCS = boot/bootloader.c \
+         system/kernel/kernel.c \
+         system/drivers/screen.c \
+         system/drivers/idt.c \
+         system/drivers/keyboard.c \
+         system/drivers/mouse.c
 
-$(TARGET): $(SRCS) $(HEADERS)
-	$(CXX) $(CXXFLAGS) $(SRCS) -o $(TARGET) $(LDFLAGS)
+# Все исходные файлы на Ассемблере
+ASM_SRCS = system/drivers/interrupts.asm
 
-run: $(TARGET)
-	./$(TARGET)
+# Магия: переселяем файлы в папку build/
+C_OBJS = $(addprefix build/, $(notdir $(C_SRCS:.c=.o)))
+ASM_OBJS = $(addprefix build/, $(notdir $(ASM_SRCS:.asm=.o)))
+OBJS = $(C_OBJS) $(ASM_OBJS)
+
+all: build
+
+build: | build_dir $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o BOOTX64.EFI $(OBJS)
+	mkdir -p image/EFI/BOOT
+	cp BOOTX64.EFI image/EFI/BOOT/BOOTX64.EFI
+	echo "FS0:\\EFI\\BOOT\\BOOTX64.EFI" > image/startup.nsh
+
+build/bootloader.o: boot/bootloader.c | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/kernel.o: system/kernel/kernel.c | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/screen.o: system/drivers/screen.c | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/idt.o: system/drivers/idt.c | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/keyboard.o: system/drivers/keyboard.c | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/mouse.o: system/drivers/mouse.c | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Правило для компиляции файлов .asm в папку build/
+build/interrupts.o: system/drivers/interrupts.asm | build_dir
+	$(ASM) $(ASMFLAGS) $< -o $@
+
+# Вспомогательное правило: создает папку СТРОГО до того, как начнется любая компиляция
+build_dir:
+	mkdir -p build
+
+run:
+	$(MAKE) clean
+	$(MAKE) build
+	qemu-system-x86_64 \
+		-bios ./OVMF.fd \
+		-net none \
+		-m 512M \
+		-vga std \
+		-global VGA.xres=1024 \
+		-global VGA.yres=768 \
+		-display sdl \
+		-serial stdio \
+		-drive if=none,id=usbstick,format=raw,file=fat:rw:image \
+		-device usb-ehci,id=ehci \
+		-device usb-storage,bus=ehci.0,drive=usbstick \
+		-d int \
+		-D qemu.log
 
 clean:
-	rm -f $(TARGET)
+	rm -f BOOTX64.EFI
+	rm -rf image
+	rm -rf build
 
-.PHONY: all run clean
+.PHONY: all build run clean build_dir
