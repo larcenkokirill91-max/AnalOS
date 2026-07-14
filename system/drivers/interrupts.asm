@@ -4,7 +4,6 @@ global keyboard_handler_asm
 extern keyboard_handler_c
 
 keyboard_handler_asm:
-    ; Сохраняем все регистры общего назначения
     push rax
     push rbx
     push rcx
@@ -21,14 +20,12 @@ keyboard_handler_asm:
     push r14
     push r15
 
-    ; Выравнивание стека по границе 16 байт и выделение Shadow Space (32 байта) под MS ABI
     mov rbp, rsp
-    sub rsp, 40         ; 32 байта под shadow space + 8 байт для гарантии выравнивания
-    and rsp, ~0xF       ; Жестко выравниваем указатель стека RSP
+    sub rsp, 40
+    and rsp, ~0xF
 
     call keyboard_handler_c
 
-    ; Восстанавливаем оригинальное состояние стека перед извлечением регистров
     mov rsp, rbp
 
     pop r15
@@ -96,7 +93,9 @@ mouse_handler_asm:
 global dummy_handler_asm
 dummy_handler_asm:
     push rax
-    mov rax, 0xFEE000B0
-    mov dword [rax], 0
+    ; Отправляем EOI в оба PIC (Master и Slave), так как мы не знаем, откуда прилетело лишнее прерывание
+    mov al, 0x20
+    out 0xA0, al
+    out 0x20, al
     pop rax
     iretq

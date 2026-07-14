@@ -1,11 +1,9 @@
 #include <stdint.h>
 #include "../include/mouse.h"
 
-// Глобальные переменные для сборки пакета данных от мыши
 int mouse_cycle = 0;
-uint8_t mouse_bytes[3]; // Массив строго на 3 байта
+uint8_t mouse_bytes[3];
 
-// Связываем флаг события мыши с главным циклом ядра в kernel.c
 extern volatile int has_mouse_event;
 
 static inline uint8_t inb(uint16_t port) {
@@ -18,12 +16,15 @@ static inline void outb(uint16_t port, uint8_t data) {
     __asm__ volatile("outb %0, %1" :: "a"(data), "Nd"(port));
 }
 
+// ИСПРАВЛЕНО: Безопасное ожидание с таймаутом, чтобы не зависнуть намертво
 void mouse_wait_write() {
-    while ((inb(0x64) & 2) != 0);
+    volatile uint32_t timeout = 100000;
+    while ((inb(0x64) & 2) != 0 && --timeout);
 }
 
 void mouse_wait_read() {
-    while ((inb(0x64) & 1) == 0);
+    volatile uint32_t timeout = 100000;
+    while ((inb(0x64) & 1) == 0 && --timeout);
 }
 
 void mouse_write(uint8_t data) {
@@ -41,47 +42,45 @@ uint8_t mouse_read() {
 void init_mouse() {
     uint8_t status;
 
-    mouse_wait_write();
-    outb(0x64, 0xA8);
+    // Очистим буфер от мусора UEFI, если он там есть
+    volatile uint32_t clean = 100;
+    while ((inb(0x64) & 1) && --clean) { inb(0x60); }
 
     mouse_wait_write();
-    outb(0x64, 0x20);
+    outb(0x64, 0xA8); // Включить мышь
+
+    mouse_wait_write();
+    outb(0x64, 0x20); // Прочитать Comand Byte
     mouse_wait_read();
     status = inb(0x60);
 
-    status |= 2;
+    status |= 2;    // Разрешить прерывания IRQ12 мыши
+    status &= ~0x20; // Сбросить бит отключения мыши
 
     mouse_wait_write();
-    outb(0x64, 0x60);
+    outb(0x64, 0x60); // Записать Comand Byte обратно
     mouse_wait_write();
     outb(0x60, status);
 
-    mouse_write(0xF6);
+    mouse_write(0xF6); // Set default
     mouse_read();
 
-    mouse_write(0xF4);
+    mouse_write(0xF4); // Enable data reporting
     mouse_read();
 }
 
 void mouse_handler_c() {
     uint8_t data = inb(0x60);
 
-    // Записываем пришедший байт в наш буфер пакета
     mouse_bytes[mouse_cycle] = data;
     mouse_cycle++;
 
-    // Мышь PS/2 присылает данные пакетами строго по 3 байта
     if (mouse_cycle == 3) {
-        mouse_cycle = 0; // Сбрасываем счетчик для следующего движения
-
-        // Сигнализируем главному циклу ядра в kernel.c, что пакет мыши собран!
+        mouse_cycle = 0;
         has_mouse_event = 1;
     }
 
-    // Сброс для старого контроллера прерываний PIC (Slave PIC, так как мышь на IRQ12)
-    outb(0xA0, 0x20);
-    outb(0x20, 0x20);
-
-    // Сброс для локального APIC процессора
-    // *(volatile uint32_t*)(0xFEE000B0) = 0;
+    // ИСПРАВЛЕНО: Для Slave прерываний (IRQ 8-15) шлем EOI в ОБА контроллера PIC!
+    outb(0xA0, 0x20); // Slave PIC
+    outb(0x20, 0x20); // Master PIC
 }

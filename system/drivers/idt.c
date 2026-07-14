@@ -5,20 +5,6 @@ static inline void outb(uint16_t port, uint8_t data) {
     __asm__ volatile("outb %0, %1" :: "a"(data), "Nd"(port));
 }
 
-static inline void outw(uint16_t port, uint16_t data) {
-    __asm__ volatile("outw %0, %1" :: "a"(data), "Nd"(port));
-}
-
-static inline void outl(uint16_t port, uint32_t data) {
-    __asm__ volatile("outl %0, %1" :: "a"(data), "Nd"(port));
-}
-
-static inline uint32_t inl(uint16_t port) {
-    uint32_t data;
-    __asm__ volatile("inl %1, %0" : "=a"(data) : "Nd"(port));
-    return data;
-}
-
 void io_wait(void) {
     asm volatile("outb %%al, $0x80" : : "a"(0));
 }
@@ -31,11 +17,6 @@ struct IDTEntry {
     uint16_t offset_mid;
     uint32_t offset_high;
     uint32_t reserved;
-} __attribute__((packed));
-
-struct IDTPointer {
-    uint16_t limit;
-    uint64_t base;
 } __attribute__((packed));
 
 struct IDTEntry idt[256];
@@ -80,14 +61,12 @@ void init_idt() {
     idtr.base = (uint64_t)&idt;
 
     __asm__ volatile("lidt %0" :: "m"(idtr));
-    __asm__ volatile("sti");
 }
 
 void init_ioapic(void) {
-    // Инициализация PIC контроллеров (перенос векторов, чтобы они не пересекались с исключениями CPU)
     outb(0x20, 0x11);
     io_wait();
-    outb(0x21, 0x20);
+    outb(0x21, 0x20); // Сдвиг векторов Master PIC на 0x20 (32). Клавиатура IRQ1 станет 33
     io_wait();
     outb(0x21, 0x04);
     io_wait();
@@ -96,12 +75,15 @@ void init_ioapic(void) {
 
     outb(0xA0, 0x11);
     io_wait();
-    outb(0xA1, 0x28);
+    outb(0xA1, 0x28); // Сдвиг векторов Slave PIC на 0x28 (40). Мышь IRQ12 станет 52?
     io_wait();
     outb(0xA1, 0x02);
     io_wait();
     outb(0xA1, 0x01);
     io_wait();
 
-    // Маскирование портов удалено, так как UEFI уже выключен штатно в загрузчике
+    outb(0x21, ~0x06); // Включаем IRQ1 (клавиатура) и IRQ2 (каскад на Slave PIC)
+    io_wait();
+    outb(0xA1, ~0x10); // Включаем IRQ12 (мышь) на Slave PIC
+    io_wait();
 }

@@ -13,7 +13,6 @@ static inline uint8_t inb(uint16_t port) {
     return data;
 }
 
-// Переносим функцию сброса сюда, чтобы вызвать её без задержек
 void sys_reset_direct(void) {
     outb(0xCF9, 0x02);
     __asm__ volatile("outb %%al, $0x80" : : "a"(0)); // io_wait
@@ -24,7 +23,6 @@ void sys_reset_direct(void) {
 void keyboard_handler_c() {
     uint8_t scancode = inb(0x60);
 
-    // КРИТИЧЕСКИЙ ОТРЕЗОК: Если это скан-код нажатия ESC (0x01) — шлем плату в ребут прямо сейчас!
     if (scancode == 0x01) {
         sys_reset_direct();
     }
@@ -32,7 +30,6 @@ void keyboard_handler_c() {
     last_scancode = scancode;
     has_keyboard_event = 1;
 
-    // Сброс контроллера прерываний PIC
     outb(0x20, 0x20);
     // *(volatile uint32_t*)(0xFEE000B0) = 0;
 }
