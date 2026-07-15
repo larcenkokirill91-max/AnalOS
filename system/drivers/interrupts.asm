@@ -93,7 +93,6 @@ mouse_handler_asm:
 global dummy_handler_asm
 dummy_handler_asm:
     push rax
-    ; Отправляем EOI в оба PIC (Master и Slave), так как мы не знаем, откуда прилетело лишнее прерывание
     mov al, 0x20
     out 0xA0, al
     out 0x20, al

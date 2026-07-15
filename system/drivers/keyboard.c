@@ -31,5 +31,4 @@ void keyboard_handler_c() {
     has_keyboard_event = 1;
 
     outb(0x20, 0x20);
-    // *(volatile uint32_t*)(0xFEE000B0) = 0;
 }

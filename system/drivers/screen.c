@@ -3,13 +3,11 @@
 
 static UINT32* real_framebuffer = 0;
 
-// Массив удален! Вместо него используем чистый указатель
 static EFI_GRAPHICS_OUTPUT_BLT_PIXEL* virtual_framebuffer = 0;
 
 void init_screen_driver(BootInfo* info) {
     if (info) {
         real_framebuffer = (UINT32*)info->FrameBufferBase;
-        // Направляем наш скрытый буфер на безопасный кусок оперативной памяти
         virtual_framebuffer = (EFI_GRAPHICS_OUTPUT_BLT_PIXEL*)info->VirtualFrameBuffer;
     }
 }

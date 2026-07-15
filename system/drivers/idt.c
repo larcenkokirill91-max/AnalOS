@@ -66,7 +66,7 @@ void init_idt() {
 void init_ioapic(void) {
     outb(0x20, 0x11);
     io_wait();
-    outb(0x21, 0x20); // Сдвиг векторов Master PIC на 0x20 (32). Клавиатура IRQ1 станет 33
+    outb(0x21, 0x20);
     io_wait();
     outb(0x21, 0x04);
     io_wait();
@@ -75,7 +75,7 @@ void init_ioapic(void) {
 
     outb(0xA0, 0x11);
     io_wait();
-    outb(0xA1, 0x28); // Сдвиг векторов Slave PIC на 0x28 (40). Мышь IRQ12 станет 52?
+    outb(0xA1, 0x28);
     io_wait();
     outb(0xA1, 0x02);
     io_wait();

@@ -56,7 +56,6 @@ EFIAPI long long efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         while(1) { __asm__ __volatile__("hlt"); }
     }
 
-    // ИСПРАВЛЕНО: тип 0 (AllocateAnyPages) вместо 2
     unsigned long long v_buffer_addr = 0;
     long long status = bs->AllocatePages(0, 4, 768, &v_buffer_addr);
     if (status != 0) {
@@ -80,7 +79,6 @@ EFIAPI long long efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     map_size += 2048;
 
     unsigned long long map_buffer = 0;
-    // ИСПРАВЛЕНО: тип 0 (AllocateAnyPages) вместо 2
     bs->AllocatePages(0, 4, (map_size / 4096) + 1, &map_buffer);
 
     status = bs->GetMemoryMap(&map_size, (void*)map_buffer, &map_key, &desc_size, &desc_ver);
