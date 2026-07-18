@@ -153,9 +153,7 @@ EFIAPI void draw_taskbar(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT32 rad, UIN
         return;
     }
 
-    draw_rect(x + rad, y, w - (rad * 2), rad, r, g, b, a);
-    draw_rect(x + rad, y + rad, w - (rad * 2), h - (rad * 2), r, g, b, a);
-    draw_rect(x + rad, y + h - rad, w - (rad * 2), rad, r, g, b, a);
+    draw_rect(x + rad, y, w - (rad * 2), h, r, g, b, a);
     draw_rect(x, y + rad, rad, h - (rad * 2), r, g, b, a);
     draw_rect((x + w) - rad, y + rad, rad, h - (rad * 2), r, g, b, a);
 

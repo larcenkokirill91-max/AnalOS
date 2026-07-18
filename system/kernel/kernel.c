@@ -90,6 +90,9 @@ void __attribute__((ms_abi)) kernel_main(BootInfo* info) {
             if (last_scancode == 0x01) {
                 sys_reset();
             }
+        } else if (has_mouse_event) {
+            mouse_handler_c();
+            swap_buffers(0);
         }
     }
 }

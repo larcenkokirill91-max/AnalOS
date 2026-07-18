@@ -1,11 +1,15 @@
 # Компиляторы и утилиты
 CC = x86_64-w64-mingw32-gcc
+CXX = x86_64-w64-mingw32-g++
 ASM = nasm
 
-# Флаги компиляции
+# Флаги компиляции для C
 CFLAGS = -ffreestanding -nostdlib -mno-red-zone -fno-builtin -Wall -O2 \
          -I. \
          -Isystem/include
+
+# Флаги компиляции для C++ (ОБЯЗАТЕЛЬНО отключаем исключения и RTTI для ядра ОС)
+CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 
 ASMFLAGS = -f elf64
 
@@ -15,7 +19,7 @@ LDFLAGS = -Wl,--subsystem,10 \
           -Wl,--dll \
           -s
 
-# Все исходные файлы на C
+# Список всех исходников (просто добавляйте новые файлы сюда через пробел)
 C_SRCS = boot/bootloader.c \
          system/kernel/kernel.c \
          system/drivers/screen.c \
@@ -23,45 +27,48 @@ C_SRCS = boot/bootloader.c \
          system/drivers/keyboard.c \
          system/drivers/mouse.c
 
-# Все исходные файлы на Ассемблере
+CXX_SRCS = system/drivers/mouse.cpp
+
 ASM_SRCS = system/drivers/interrupts.asm
 
-# Магия: переселяем файлы в папку build/
+# Автоматическая генерация имен объектных файлов в папке build/
 C_OBJS = $(addprefix build/, $(notdir $(C_SRCS:.c=.o)))
 ASM_OBJS = $(addprefix build/, $(notdir $(ASM_SRCS:.asm=.o)))
-OBJS = $(C_OBJS) $(ASM_OBJS)
+# Для C++ файлов делаем суффикс _cpp.o, чтобы избежать конфликтов с .c файлами
+CXX_OBJS = $(addprefix build/, $(notdir $(CXX_SRCS:.cpp=_cpp.o)))
+
+OBJS = $(C_OBJS) $(CXX_OBJS) $(ASM_OBJS)
 
 all: build
 
 build: | build_dir $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o BOOTX64.EFI $(OBJS)
+	# Собираем через CXX, чтобы линкер понимал C++
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o BOOTX64.EFI $(OBJS)
 	mkdir -p image/EFI/BOOT
 	cp BOOTX64.EFI image/EFI/BOOT/BOOTX64.EFI
 	echo "FS0:\\EFI\\BOOT\\BOOTX64.EFI" > image/startup.nsh
 
-build/bootloader.o: boot/bootloader.c | build_dir
+# --- АВТОМАТИЧЕСКИЕ ПРАВИЛА КОМПИЛЯЦИИ ---
+
+# Правило для всех .c файлов
+build/%.o: boot/%.c | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/kernel.o: system/kernel/kernel.c | build_dir
+build/%.o: system/kernel/%.c | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/screen.o: system/drivers/screen.c | build_dir
+build/%.o: system/drivers/%.c | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/idt.o: system/drivers/idt.c | build_dir
-	$(CC) $(CFLAGS) -c $< -o $@
+# Правило для всех .cpp файлов (создает %_cpp.o)
+build/%_cpp.o: system/drivers/%.cpp | build_dir
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-build/keyboard.o: system/drivers/keyboard.c | build_dir
-	$(CC) $(CFLAGS) -c $< -o $@
-
-build/mouse.o: system/drivers/mouse.c | build_dir
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# Правило для компиляции файлов .asm в папку build/
-build/interrupts.o: system/drivers/interrupts.asm | build_dir
+# Правило для всех .asm файлов
+build/%.o: system/drivers/%.asm | build_dir
 	$(ASM) $(ASMFLAGS) $< -o $@
 
-# Вспомогательное правило: создает папку СТРОГО до того, как начнется любая компиляция
+# Вспомогательное правило для папки
 build_dir:
 	mkdir -p build
 
