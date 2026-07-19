@@ -23,19 +23,29 @@ static inline void outb(uint16_t port, uint8_t data) {
     __asm__ volatile("outb %0, %1" :: "a"(data), "Nd"(port));
 }
 
+// Микропауза для шины ввода-вывода
+static inline void io_wait(void) {
+    outb(0x80, 0);
+}
+
 void mouse_wait_write() {
-    volatile uint32_t timeout = 100000;
-    while ((inb(0x64) & 2) != 0 && --timeout);
+    // Таймаут увеличен до миллиона циклов с микропаузами
+    volatile uint32_t timeout = 1000000;
+    while ((inb(0x64) & 2) != 0 && --timeout) {
+        io_wait();
+    }
 }
 
 void mouse_wait_read() {
-    volatile uint32_t timeout = 100000;
-    while ((inb(0x64) & 1) == 0 && --timeout);
+    volatile uint32_t timeout = 1000000;
+    while ((inb(0x64) & 1) == 0 && --timeout) {
+        io_wait();
+    }
 }
 
 void mouse_write(uint8_t data) {
     mouse_wait_write();
-    outb(0x64, 0xD4);
+    outb(0x64, 0xD4); // Сигнал контроллеру: пишем мыши
     mouse_wait_write();
     outb(0x60, data);
 }
@@ -48,8 +58,12 @@ uint8_t mouse_read() {
 void init_mouse() {
     uint8_t status;
 
+    // Очищаем буфер от старого мусора перед инициализацией
     volatile uint32_t clean = 100;
-    while ((inb(0x64) & 1) && --clean) { inb(0x60); }
+    while ((inb(0x64) & 1) && --clean) {
+        inb(0x60);
+        io_wait();
+    }
 
     mouse_wait_write();
     outb(0x64, 0xA8); // Включить вспомогательный порт мыши
@@ -79,23 +93,18 @@ void init_mouse() {
 void mouse_handler_c() {
     uint8_t status = inb(0x64);
 
-    // Проверяем, есть ли вообще данные в буфере PS/2
-    if ((status & 0x01) == 0) {
-        // ОБЯЗАТЕЛЬНО: перед выходом отправляем EOI, если прерывание сработало,
-        // иначе контроллер прерываний заблокирует систему.
-        // Если у вас APIC: *(volatile uint32_t*)0xFEE000B0 = 0;
-        // Если у вас PIC (как на вашем первом скрине):
+    // Проверяем, есть ли данные и принадлежат ли они мыши (бит 5 порта 0x64)
+    if ((status & 0x01) == 0 || (status & 0x20) == 0) {
         outb(0xA0, 0x20);
         outb(0x20, 0x20);
         return;
     }
 
-    // Читаем байт МЫШИ. Мы ОБЯЗАНЫ его вычитать, чтобы очистить буфер порта 0x60!
     uint8_t data = inb(0x60);
 
-    // Синхронизация: первый байт пакета мыши ВСЕГДА должен иметь бит 3 (0x08)
+    // Синхронизация
     if (mouse_cycle == 0 && !(data & 0x08)) {
-        // Если фаза сбилась, мы всё равно отправляем EOI и выходим, готовые к следующему байту
+        // Игнорируем байт, так как это не начало пакета
         outb(0xA0, 0x20);
         outb(0x20, 0x20);
         return;
@@ -104,36 +113,28 @@ void mouse_handler_c() {
     mouse_bytes[mouse_cycle] = data;
     mouse_cycle++;
 
-    // Когда собрали 3 байта стандартного пакета PS/2
     if (mouse_cycle == 3) {
         mouse_cycle = 0;
         has_mouse_event = 1;
 
-        int move_x = mouse_bytes[1];
-        int move_y = mouse_bytes[2];
+        // Автоматическое приведение типов через знаковый байт (int8_t)
+        int move_x = (int32_t)((int8_t)mouse_bytes[1]);
+        int move_y = (int32_t)((int8_t)mouse_bytes[2]);
 
-        // Восстановление знака для относительного смещения
-        if (mouse_bytes[0] & 0x10) move_x |= ~0xFF;
-        if (mouse_bytes[0] & 0x20) move_y |= ~0xFF;
-
-        // Обновляем координаты на экране
+        // Обновляем координаты ОС
         mouse_x += move_x;
-        mouse_y -= move_y;
+        mouse_y -= move_y; // Инверсия Y для PS/2 экрана
 
-        // Ограничиваем курсор размерами вашего QEMU (1024x768)
+        // Ограничители экрана (1024x768)
         if (mouse_x < 0) mouse_x = 0;
         if (mouse_y < 0) mouse_y = 0;
         if (mouse_x > 1024 - 32) mouse_x = 1024 - 32;
         if (mouse_y > 768 - 32)  mouse_y = 768 - 32;
 
-        // Отрисовка курсора (ваша C++ функция)
+        // Отрисовка курсора
         draw_mouse(mouse_x, mouse_y, 32, 255);
     }
 
-    // ОБЯЗАТЕЛЬНО: Отправляем сигнал End of Interrupt (EOI) в самом конце обработчика!
-    // Если вы используете современный APIC, замените эти две строчки на:
-    // volatile uint32_t* lapic_eoi = (volatile uint32_t*)0xFEE000B0;
-    // *lapic_eoi = 0;
-    outb(0xA0, 0x20); // Slave PIC
-    outb(0x20, 0x20); // Master PIC
+    outb(0xA0, 0x20);
+    outb(0x20, 0x20);
 }
